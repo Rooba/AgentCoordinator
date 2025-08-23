@@ -55,6 +55,14 @@ defmodule AgentCoordinator.TaskRegistry do
     GenServer.call(__MODULE__, {:get_agent_current_task, agent_id})
   end
 
+  def get_agent(agent_id) do
+    GenServer.call(__MODULE__, {:get_agent, agent_id})
+  end
+
+  def get_agent_by_name(agent_name) do
+    GenServer.call(__MODULE__, {:get_agent_by_name, agent_name})
+  end
+
   def update_task_activity(task_id, tool_name, arguments) do
     GenServer.call(__MODULE__, {:update_task_activity, task_id, tool_name, arguments})
   end
@@ -75,8 +83,8 @@ defmodule AgentCoordinator.TaskRegistry do
     GenServer.call(__MODULE__, :get_task_board)
   end
 
-  def register_agent(name, capabilities) do
-    agent = Agent.new(name, capabilities)
+  def register_agent(name, capabilities, opts \\ []) do
+    agent = Agent.new(name, capabilities, opts)
     GenServer.call(__MODULE__, {:register_agent, agent})
   end
 
@@ -269,6 +277,24 @@ defmodule AgentCoordinator.TaskRegistry do
             task = find_task_by_id(state, task_id)
             {:reply, task, state}
         end
+    end
+  end
+
+  def handle_call({:get_agent, agent_id}, _from, state) do
+    case Map.get(state.agents, agent_id) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+      agent ->
+        {:reply, {:ok, agent}, state}
+    end
+  end
+
+  def handle_call({:get_agent_by_name, agent_name}, _from, state) do
+    case Enum.find(state.agents, fn {_id, agent} -> agent.name == agent_name end) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+      {_id, agent} ->
+        {:reply, {:ok, agent}, state}
     end
   end
 

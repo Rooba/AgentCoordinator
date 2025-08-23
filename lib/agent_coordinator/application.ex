@@ -23,6 +23,9 @@ defmodule AgentCoordinator.Application do
       # Task registry with NATS integration (conditionally add persistence)
       {AgentCoordinator.TaskRegistry, nats: if(enable_persistence, do: nats_config(), else: nil)},
 
+      # MCP Server Manager (manages external MCP servers)
+      {AgentCoordinator.MCPServerManager, config_file: Application.get_env(:agent_coordinator, :mcp_config_file, "mcp_servers.json")},
+
       # MCP server
       AgentCoordinator.MCPServer,
 

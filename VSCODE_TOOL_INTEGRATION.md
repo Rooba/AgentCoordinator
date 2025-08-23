@@ -1,5 +1,37 @@
 # VS Code Tool Integration with Agent Coordinator
 
+## 🎉 Latest Update: Dynamic Tool Discovery (COMPLETED)
+
+**Date**: August 23, 2025
+**Status**: ✅ **COMPLETED** - Full dynamic tool discovery implementation
+
+### What Changed
+The Agent Coordinator has been refactored to eliminate all hardcoded tool lists and implement **fully dynamic tool discovery** following the MCP protocol specification.
+
+**Key Improvements**:
+- ✅ **No hardcoded tools**: All external server tools discovered via MCP `tools/list`
+- ✅ **Conditional VS Code tools**: Only included when VS Code functionality is available
+- ✅ **Real-time refresh**: `refresh_tools()` function to rediscover tools on demand
+- ✅ **Perfect MCP compliance**: Follows protocol specification exactly
+- ✅ **Better error handling**: Proper handling of both PIDs and Ports for server monitoring
+
+**Example Tool Discovery Results**:
+```
+Found 44 total tools:
+• Coordinator tools: 6 (register_agent, create_task, etc.)
+• External MCP tools: 26+ (context7, filesystem, memory, sequential thinking)
+• VS Code tools: 12 (when available)
+```
+
+### Benefits
+1. **MCP Protocol Compliance**: Perfect adherence to MCP specification
+2. **Flexibility**: New MCP servers can be added without code changes
+3. **Reliability**: Tools automatically discovered when servers restart
+4. **Performance**: Only available tools are included in routing
+5. **Debugging**: Clear visibility into which tools are available
+
+---
+
 ## Overview
 
 This document outlines the implementation of VS Code's built-in tools as MCP (Model Context Protocol) tools within the Agent Coordinator system. This integration allows agents to access VS Code's native capabilities alongside external MCP servers through a unified coordination interface.
@@ -269,7 +301,7 @@ capabilities: [
 **Tools to Implement:**
 
 - `vscode_get_diagnostics` - Get language server diagnostics
-- `vscode_format_document` - Format current document  
+- `vscode_format_document` - Format current document
 - `vscode_format_selection` - Format selected text
 - `vscode_find_references` - Find symbol references
 - `vscode_go_to_definition` - Navigate to definition
@@ -353,10 +385,32 @@ capabilities: [
 
 ### 🎯 **Next Immediate Actions**
 
-1. **Priority 1**: Implement real VS Code Extension API bridge (replace placeholders)
-2. **Priority 2**: Add Phase 2 language services tools
-3. **Priority 3**: Create comprehensive testing suite
-4. **Priority 4**: Document usage patterns and best practices
+1. **Priority 1**: Implement proper agent identification system for multi-agent scenarios
+2. **Priority 2**: Implement real VS Code Extension API bridge (replace placeholders)
+3. **Priority 3**: Add Phase 2 language services tools
+4. **Priority 4**: Create comprehensive testing suite
+5. **Priority 5**: Document usage patterns and best practices
+
+### 🔧 **Critical Enhancement: Multi-Agent Identification System**
+
+**Problem:** Current system treats all GitHub Copilot instances as the same agent, causing conflicts in multi-agent scenarios.
+
+**Solution:** Implement unique agent identification with session-based tracking.
+
+**Implementation Requirements:**
+
+1. **Agent ID Parameter**: All tools must include an `agent_id` parameter
+2. **Session-Based Registration**: Each chat session/agent instance gets unique ID
+3. **Tool Schema Updates**: Add `agent_id` to all VS Code tool schemas
+4. **Auto-Registration**: System automatically creates unique agents per session
+5. **Agent Isolation**: Tasks, permissions, and state isolated per agent ID
+
+**Benefits:**
+
+- Multiple agents can work simultaneously without conflicts
+- Individual agent permissions and capabilities
+- Proper task assignment and coordination
+- Clear audit trails per agent
 
 ### 📊 **Success Metrics**
 

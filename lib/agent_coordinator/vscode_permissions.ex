@@ -1,7 +1,7 @@
 defmodule AgentCoordinator.VSCodePermissions do
   @moduledoc """
   Manages permissions for VS Code tool access.
-  
+
   Provides fine-grained permission control for agents accessing VS Code tools,
   ensuring security and preventing unauthorized operations.
   """
@@ -10,7 +10,7 @@ defmodule AgentCoordinator.VSCodePermissions do
 
   @permission_levels %{
     read_only: 1,
-    editor: 2, 
+    editor: 2,
     filesystem: 3,
     terminal: 4,
     git: 5,
@@ -21,7 +21,7 @@ defmodule AgentCoordinator.VSCodePermissions do
     # File Operations (filesystem level)
     "vscode_read_file" => :read_only,
     "vscode_write_file" => :filesystem,
-    "vscode_create_file" => :filesystem, 
+    "vscode_create_file" => :filesystem,
     "vscode_delete_file" => :filesystem,
     "vscode_list_directory" => :read_only,
     "vscode_get_workspace_folders" => :read_only,
@@ -35,34 +35,34 @@ defmodule AgentCoordinator.VSCodePermissions do
     # Command Operations (varies by command)
     "vscode_run_command" => :admin,  # Default to admin, will check specific commands
 
-    # User Communication  
+    # User Communication
     "vscode_show_message" => :read_only
   }
 
   @whitelisted_commands [
     # Safe editor commands
     "editor.action.formatDocument",
-    "editor.action.formatSelection", 
+    "editor.action.formatSelection",
     "editor.action.organizeImports",
     "editor.fold",
     "editor.unfold",
     "editor.toggleFold",
-    
+
     # Safe navigation commands
     "workbench.action.navigateBack",
     "workbench.action.navigateForward",
     "workbench.action.gotoLine",
     "workbench.action.quickOpen",
     "workbench.action.showCommands",
-    
+
     # Safe file operations
     "workbench.action.files.save",
     "workbench.action.files.saveAll",
     "workbench.explorer.refreshExplorer",
-    
+
     # Language service operations
     "editor.action.goToDeclaration",
-    "editor.action.goToDefinition", 
+    "editor.action.goToDefinition",
     "editor.action.goToReferences",
     "editor.action.rename",
     "editor.action.quickFix"
@@ -70,25 +70,25 @@ defmodule AgentCoordinator.VSCodePermissions do
 
   @doc """
   Check if an agent has permission to use a specific VS Code tool.
-  
+
   Returns {:ok, permission_level} if allowed, {:error, reason} if denied.
   """
   def check_permission(context, tool_name, args) do
     agent_id = context[:agent_id] || "unknown"
-    
+
     # Get required permission level for this tool
     required_level = get_required_permission(tool_name, args)
-    
+
     # Get agent's permission level
     agent_level = get_agent_permission_level(agent_id)
-    
+
     # Check if agent has sufficient permissions
     if permission_sufficient?(agent_level, required_level) do
       # Additional checks for specific tools
       case additional_checks(tool_name, args, context) do
-        :ok -> 
+        :ok ->
           {:ok, required_level}
-        {:error, reason} -> 
+        {:error, reason} ->
           {:error, reason}
       end
     else
@@ -106,7 +106,7 @@ defmodule AgentCoordinator.VSCodePermissions do
     # - Trust scores
     # - Capability declarations
     # - User-configured permissions
-    
+
     case agent_id do
       "github_copilot_session" -> :filesystem
       id when is_binary(id) and byte_size(id) > 0 -> :editor  # Other registered agents
@@ -150,10 +150,10 @@ defmodule AgentCoordinator.VSCodePermissions do
     case tool_name do
       tool when tool in ["vscode_write_file", "vscode_create_file", "vscode_delete_file"] ->
         check_workspace_bounds(args["path"], context)
-        
+
       "vscode_run_command" ->
         check_command_safety(args["command"], args["args"])
-        
+
       _ ->
         :ok
     end
@@ -162,44 +162,44 @@ defmodule AgentCoordinator.VSCodePermissions do
   defp check_workspace_bounds(path, _context) when is_binary(path) do
     # Ensure file operations are within workspace bounds
     # This is a simplified check - real implementation would use VS Code workspace API
-    
+
     forbidden_patterns = [
       # System directories
       "/etc/", "/bin/", "/usr/", "/var/", "/tmp/",
-      # User sensitive areas  
+      # User sensitive areas
       "/.ssh/", "/.config/", "/home/", "~",
       # Relative path traversal
       "../", "..\\"
     ]
-    
+
     if Enum.any?(forbidden_patterns, fn pattern -> String.contains?(path, pattern) end) do
       {:error, "Path outside workspace bounds or accessing sensitive directories"}
     else
       :ok
     end
   end
-  
+
   defp check_workspace_bounds(_path, _context), do: {:error, "Invalid path format"}
 
   defp check_command_safety(command, args) when is_binary(command) do
     cond do
       command in @whitelisted_commands ->
         :ok
-        
+
       String.starts_with?(command, "extension.") ->
         {:error, "Extension commands not allowed for security"}
-        
+
       String.contains?(command, "terminal") ->
         {:error, "Terminal commands require terminal permission level"}
-        
+
       String.contains?(command, "git") ->
         {:error, "Git commands require git permission level"}
-        
+
       true ->
         {:error, "Command '#{command}' not in whitelist"}
     end
   end
-  
+
   defp check_command_safety(_command, _args), do: {:error, "Invalid command format"}
 
   @doc """
@@ -209,7 +209,7 @@ defmodule AgentCoordinator.VSCodePermissions do
     %{
       levels: %{
         read_only: "File reading, workspace inspection, message display",
-        editor: "Text editing, selections, safe editor commands", 
+        editor: "Text editing, selections, safe editor commands",
         filesystem: "File creation/deletion, directory operations",
         terminal: "Terminal access and command execution",
         git: "Version control operations",

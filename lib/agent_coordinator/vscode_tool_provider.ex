@@ -1,7 +1,7 @@
 defmodule AgentCoordinator.VSCodeToolProvider do
   @moduledoc """
   Provides VS Code Extension API tools as MCP-compatible tools.
-  
+
   This module wraps VS Code's Extension API calls and exposes them as MCP tools
   that can be used by agents through the unified coordination system.
   """
@@ -11,9 +11,10 @@ defmodule AgentCoordinator.VSCodeToolProvider do
 
   @doc """
   Returns the list of available VS Code tools with their MCP schemas.
+  All tools include agent_id parameter for proper multi-agent identification.
   """
   def get_tools do
-    [
+    base_tools = [
       # File Operations
       %{
         "name" => "vscode_read_file",
@@ -26,7 +27,7 @@ defmodule AgentCoordinator.VSCodeToolProvider do
               "description" => "Relative or absolute path to the file within the workspace"
             },
             "encoding" => %{
-              "type" => "string", 
+              "type" => "string",
               "description" => "File encoding (default: utf8)",
               "enum" => ["utf8", "utf16le", "base64"]
             }
@@ -65,7 +66,7 @@ defmodule AgentCoordinator.VSCodeToolProvider do
         "name" => "vscode_create_file",
         "description" => "Create a new file using VS Code's file system API.",
         "inputSchema" => %{
-          "type" => "object", 
+          "type" => "object",
           "properties" => %{
             "path" => %{
               "type" => "string",
@@ -91,7 +92,7 @@ defmodule AgentCoordinator.VSCodeToolProvider do
           "type" => "object",
           "properties" => %{
             "path" => %{
-              "type" => "string", 
+              "type" => "string",
               "description" => "Relative or absolute path to the file/directory within the workspace"
             },
             "recursive" => %{
@@ -117,7 +118,7 @@ defmodule AgentCoordinator.VSCodeToolProvider do
               "description" => "Relative or absolute path to the directory within the workspace"
             },
             "include_hidden" => %{
-              "type" => "boolean", 
+              "type" => "boolean",
               "description" => "Whether to include hidden files/directories (default: false)"
             }
           },
@@ -203,7 +204,7 @@ defmodule AgentCoordinator.VSCodeToolProvider do
               "description" => "Start line number (0-based)"
             },
             "start_character" => %{
-              "type" => "number", 
+              "type" => "number",
               "description" => "Start character position (0-based)"
             },
             "end_line" => %{
@@ -269,6 +270,37 @@ defmodule AgentCoordinator.VSCodeToolProvider do
         }
       }
     ]
+
+    # Add agent_id parameter to all tools for multi-agent coordination
+    Enum.map(base_tools, &add_agent_id_parameter/1)
+  end
+
+  # Add agent_id parameter to a tool schema
+  defp add_agent_id_parameter(tool) do
+    input_schema = tool["inputSchema"]
+    properties = Map.get(input_schema, "properties", %{})
+    required = Map.get(input_schema, "required", [])
+
+    # Add agent_id to properties
+    updated_properties = Map.put(properties, "agent_id", %{
+      "type" => "string",
+      "description" => "Unique identifier for the agent making this request. Each agent session must use a consistent, unique ID throughout their interaction. Generate a UUID or use a descriptive identifier like 'agent_main_task_001'."
+    })
+
+    # Add agent_id to required fields
+    updated_required = if "agent_id" in required, do: required, else: ["agent_id" | required]
+
+    # Update the tool schema
+    updated_input_schema = input_schema
+                          |> Map.put("properties", updated_properties)
+                          |> Map.put("required", updated_required)
+
+    # Update tool description to mention agent_id requirement
+    updated_description = tool["description"] <> " IMPORTANT: Include a unique agent_id parameter to identify your agent session."
+
+    tool
+    |> Map.put("inputSchema", updated_input_schema)
+    |> Map.put("description", updated_description)
   end
 
   @doc """
@@ -276,29 +308,78 @@ defmodule AgentCoordinator.VSCodeToolProvider do
   """
   def handle_tool_call(tool_name, args, context) do
     Logger.info("VS Code tool call: #{tool_name} with args: #{inspect(args)}")
-    
-    # Check permissions
-    case VSCodePermissions.check_permission(context, tool_name, args) do
-      {:ok, _permission_level} ->
-        # Execute the tool
-        result = execute_tool(tool_name, args, context)
-        
-        # Log the operation
-        log_tool_operation(tool_name, args, context, result)
-        
-        result
-        
-      {:error, reason} ->
-        Logger.warning("Permission denied for #{tool_name}: #{reason}")
-        {:error, %{"error" => "Permission denied", "reason" => reason}}
+
+    # Extract agent_id from args (required for all VS Code tools)
+    agent_id = Map.get(args, "agent_id")
+
+    if is_nil(agent_id) or agent_id == "" do
+      Logger.warning("Missing agent_id in VS Code tool call: #{tool_name}")
+      {:error, %{
+        "error" => "Missing agent_id",
+        "message" => "All VS Code tools require a unique agent_id parameter. Please include your agent session identifier."
+      }}
+    else
+      # Ensure agent is registered and create enhanced context
+      enhanced_context = ensure_agent_registered(agent_id, context)
+
+      # Check permissions with agent-specific context
+      case VSCodePermissions.check_permission(enhanced_context, tool_name, args) do
+        {:ok, _permission_level} ->
+          # Execute the tool
+          result = execute_tool(tool_name, args, enhanced_context)
+
+          # Log the operation
+          log_tool_operation(tool_name, args, enhanced_context, result)
+
+          result
+
+        {:error, reason} ->
+          Logger.warning("Permission denied for #{tool_name} (agent: #{agent_id}): #{reason}")
+          {:error, %{"error" => "Permission denied", "reason" => reason}}
+      end
     end
   end
 
-  # Private function to execute individual tools
+  # Ensure the agent is registered in the system and return enhanced context
+  defp ensure_agent_registered(agent_id, context) do
+    # Check if agent is already registered
+    case AgentCoordinator.TaskRegistry.get_agent(agent_id) do
+      {:ok, _agent} ->
+        # Agent exists, use existing context with agent_id
+        Map.put(context, :agent_id, agent_id)
+
+      {:error, :not_found} ->
+        # Agent not registered, auto-register with VS Code capabilities
+        Logger.info("Auto-registering new agent: #{agent_id}")
+
+        capabilities = [
+          "coding",
+          "analysis",
+          "review",
+          "documentation",
+          "vscode_editing",
+          "vscode_filesystem"
+        ]
+
+        case AgentCoordinator.TaskRegistry.register_agent(
+               "GitHub Copilot (#{agent_id})",
+               capabilities,
+               [metadata: %{agent_id: agent_id, auto_registered: true, session_start: DateTime.utc_now()}]
+             ) do
+          {:ok, _result} ->
+            Logger.info("Successfully auto-registered agent: #{agent_id}")
+            Map.put(context, :agent_id, agent_id)
+
+          {:error, reason} ->
+            Logger.error("Failed to auto-register agent #{agent_id}: #{inspect(reason)}")
+            Map.put(context, :agent_id, agent_id)  # Continue anyway
+        end
+    end
+  end  # Private function to execute individual tools
   defp execute_tool(tool_name, args, context) do
     case tool_name do
       "vscode_read_file" -> read_file(args, context)
-      "vscode_write_file" -> write_file(args, context) 
+      "vscode_write_file" -> write_file(args, context)
       "vscode_create_file" -> create_file(args, context)
       "vscode_delete_file" -> delete_file(args, context)
       "vscode_list_directory" -> list_directory(args, context)
@@ -314,7 +395,7 @@ defmodule AgentCoordinator.VSCodeToolProvider do
   end
 
   # Tool implementations (these will call VS Code Extension API via JavaScript bridge)
-  
+
   defp read_file(args, _context) do
     # For now, return a placeholder - we'll implement the actual VS Code API bridge
     {:ok, %{

@@ -26,13 +26,7 @@ exec mix run --no-halt -e "
 # Ensure all applications are started
 {:ok, _} = Application.ensure_all_started(:agent_coordinator)
 
-# Start services that are NOT in the application supervisor
-# TaskRegistry is already started by the application supervisor, so we skip it
-case AgentCoordinator.MCPServerManager.start_link([config_file: \"mcp_servers.json\"]) do
-  {:ok, _} -> :ok
-  {:error, {:already_started, _}} -> :ok
-  {:error, reason} -> raise \"Failed to start MCPServerManager: #{inspect(reason)}\"
-end
+# MCPServerManager is now started by the application supervisor automatically
 
 case AgentCoordinator.UnifiedMCPServer.start_link() do
   {:ok, _} -> :ok

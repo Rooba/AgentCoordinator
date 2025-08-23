@@ -51,6 +51,13 @@ defmodule AgentCoordinator.MCPServerManager do
     GenServer.call(__MODULE__, {:restart_server, server_name})
   end
 
+  @doc """
+  Refresh tool registry by re-discovering tools from all servers
+  """
+  def refresh_tools do
+    GenServer.call(__MODULE__, :refresh_tools)
+  end
+
   # Server callbacks
 
   def init(opts) do
@@ -174,6 +181,17 @@ defmodule AgentCoordinator.MCPServerManager do
             {:reply, {:error, reason}, state}
         end
     end
+  end
+
+  def handle_call(:refresh_tools, _from, state) do
+    # Re-discover tools from all running servers
+    updated_state = rediscover_all_tools(state)
+
+    all_tools = get_coordinator_tools() ++ (Map.values(updated_state.tool_registry) |> List.flatten())
+
+    Logger.info("Refreshed tool registry: found #{length(all_tools)} total tools")
+
+    {:reply, {:ok, length(all_tools)}, updated_state}
   end
 
   def handle_info({:DOWN, _ref, :port, port, reason}, state) do
@@ -598,9 +616,44 @@ defmodule AgentCoordinator.MCPServerManager do
     %{state | tool_registry: new_registry}
   end
 
+  defp rediscover_all_tools(state) do
+    # Re-query all running servers for their current tools
+    updated_servers =
+      Enum.reduce(state.servers, state.servers, fn {name, server_info}, acc ->
+        # Check if server is alive (handle both PID and Port)
+        server_alive = case server_info.pid do
+          nil -> false
+          pid when is_pid(pid) -> Process.alive?(pid)
+          port when is_port(port) -> Port.info(port) != nil
+          _ -> false
+        end
+
+        if server_alive do
+          case get_server_tools(server_info) do
+            {:ok, new_tools} ->
+              Logger.debug("Rediscovered #{length(new_tools)} tools from #{name}")
+              Map.put(acc, name, %{server_info | tools: new_tools})
+
+            {:error, reason} ->
+              Logger.warning("Failed to rediscover tools from #{name}: #{inspect(reason)}")
+              acc
+          end
+        else
+          Logger.warning("Server #{name} is not alive, skipping tool rediscovery")
+          acc
+        end
+      end)
+
+    # Update state with new server info and refresh tool registry
+    new_state = %{state | servers: updated_servers}
+    refresh_tool_registry(new_state)
+  end
+
   defp find_tool_server(tool_name, state) do
-    # Check Agent Coordinator tools first
-    if tool_name in get_coordinator_tool_names() do
+    # Check all tool registries (both coordinator and external servers)
+    # Start with coordinator tools
+    coordinator_tools = get_coordinator_tools()
+    if Enum.any?(coordinator_tools, fn tool -> tool["name"] == tool_name end) do
       {:coordinator, tool_name}
     else
       # Check external servers
@@ -634,6 +687,10 @@ defmodule AgentCoordinator.MCPServerManager do
             "capabilities" => %{
               "type" => "array",
               "items" => %{"type" => "string"}
+            },
+            "metadata" => %{
+              "type" => "object",
+              "description" => "Optional metadata about the agent (e.g., client_type, session_id)"
             }
           },
           "required" => ["name", "capabilities"]
@@ -703,31 +760,39 @@ defmodule AgentCoordinator.MCPServerManager do
       }
     ]
 
-    # Get VS Code tools
-    vscode_tools = AgentCoordinator.VSCodeToolProvider.get_tools()
+    # Get VS Code tools only if VS Code functionality is available
+    vscode_tools = try do
+      if Code.ensure_loaded?(AgentCoordinator.VSCodeToolProvider) do
+        AgentCoordinator.VSCodeToolProvider.get_tools()
+      else
+        Logger.debug("VS Code tools not available - module not loaded")
+        []
+      end
+    rescue
+      _ ->
+        Logger.debug("VS Code tools not available - error loading")
+        []
+    end
 
     # Combine all coordinator tools
     coordinator_native_tools ++ vscode_tools
   end
 
-  defp get_coordinator_tool_names do
-    # Agent Coordinator native tools
-    coordinator_native = ~w[register_agent create_task get_next_task complete_task get_task_board heartbeat]
-    
-    # VS Code tool names
-    vscode_tools = AgentCoordinator.VSCodeToolProvider.get_tools()
-                   |> Enum.map(fn tool -> tool["name"] end)
-    
-    coordinator_native ++ vscode_tools
-  end
+  # Removed get_coordinator_tool_names - now using dynamic tool discovery
 
   defp handle_coordinator_tool(tool_name, arguments, agent_context) do
     # Route to existing Agent Coordinator functionality or VS Code tools
     case tool_name do
       "register_agent" ->
+        opts = case arguments["metadata"] do
+          nil -> []
+          metadata -> [metadata: metadata]
+        end
+
         AgentCoordinator.TaskRegistry.register_agent(
           arguments["name"],
-          arguments["capabilities"]
+          arguments["capabilities"],
+          opts
         )
 
       "create_task" ->
