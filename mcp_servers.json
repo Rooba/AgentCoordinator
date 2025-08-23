@@ -1,0 +1,57 @@
+{
+    "servers": {
+        "mcp_context7": {
+            "type": "stdio",
+            "command": "bunx",
+			"args": [
+				"-y",
+				"@upstash/context7-mcp"
+			],
+            "auto_restart": true,
+            "description": "Context7 library documentation server"
+        },
+        "mcp_figma": {
+            "url": "http://127.0.0.1:3845/mcp",
+			"type": "http",
+            "auto_restart": true,
+            "description": "Figma design integration server"
+        },
+        "mcp_filesystem": {
+            "type": "stdio",
+            "command": "bunx",
+            "args": [
+				"-y",
+				"@modelcontextprotocol/server-filesystem",
+				"/home/ra"
+			],
+            "auto_restart": true,
+            "description": "Filesystem operations server with heartbeat coverage"
+        },
+        "mcp_memory": {
+            "type": "stdio",
+            "command": "bunx",
+            "args": [
+				"-y",
+				"@modelcontextprotocol/server-memory"
+			],
+            "auto_restart": true,
+            "description": "Memory and knowledge graph server"
+        },
+        "mcp_sequentialthinking": {
+            "type": "stdio",
+            "command": "bunx",
+            "args": [
+				"-y",
+				"@modelcontextprotocol/server-sequential-thinking"
+			],
+            "auto_restart": true,
+            "description": "Sequential thinking and reasoning server"
+        }
+    },
+    "config": {
+        "startup_timeout": 30000,
+        "heartbeat_interval": 10000,
+        "auto_restart_delay": 1000,
+        "max_restart_attempts": 3
+    }
+}

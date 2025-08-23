@@ -1,0 +1,13 @@
+{
+    "mcpServers": {
+        "agent-coordinator": {
+            "command": "/home/ra/agent_coordinator/scripts/mcp_launcher.sh",
+            "args": [],
+            "env": {
+                "MIX_ENV": "dev",
+                "NATS_HOST": "localhost",
+                "NATS_PORT": "4222"
+            }
+        }
+    }
+}
