@@ -622,7 +622,8 @@ defmodule AgentCoordinator.MCPServerManager do
   end
 
   defp get_coordinator_tools do
-    [
+    # Get Agent Coordinator native tools
+    coordinator_native_tools = [
       %{
         "name" => "register_agent",
         "description" => "Register a new agent with the coordination system",
@@ -701,14 +702,27 @@ defmodule AgentCoordinator.MCPServerManager do
         }
       }
     ]
+
+    # Get VS Code tools
+    vscode_tools = AgentCoordinator.VSCodeToolProvider.get_tools()
+
+    # Combine all coordinator tools
+    coordinator_native_tools ++ vscode_tools
   end
 
   defp get_coordinator_tool_names do
-    ~w[register_agent create_task get_next_task complete_task get_task_board heartbeat]
+    # Agent Coordinator native tools
+    coordinator_native = ~w[register_agent create_task get_next_task complete_task get_task_board heartbeat]
+    
+    # VS Code tool names
+    vscode_tools = AgentCoordinator.VSCodeToolProvider.get_tools()
+                   |> Enum.map(fn tool -> tool["name"] end)
+    
+    coordinator_native ++ vscode_tools
   end
 
-  defp handle_coordinator_tool(tool_name, arguments, _agent_context) do
-    # Route to existing Agent Coordinator functionality
+  defp handle_coordinator_tool(tool_name, arguments, agent_context) do
+    # Route to existing Agent Coordinator functionality or VS Code tools
     case tool_name do
       "register_agent" ->
         AgentCoordinator.TaskRegistry.register_agent(
@@ -734,6 +748,10 @@ defmodule AgentCoordinator.MCPServerManager do
 
       "heartbeat" ->
         AgentCoordinator.TaskRegistry.heartbeat_agent(arguments["agent_id"])
+
+      # VS Code tools - route to VS Code Tool Provider
+      "vscode_" <> _rest ->
+        AgentCoordinator.VSCodeToolProvider.handle_tool_call(tool_name, arguments, agent_context)
 
       _ ->
         %{"error" => %{"code" => -32601, "message" => "Unknown coordinator tool: #{tool_name}"}}
