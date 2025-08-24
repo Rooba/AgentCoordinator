@@ -26,7 +26,7 @@ defmodule AgentCoordinator.UnifiedMCPServer do
   Handle MCP request from GitHub Copilot
   """
   def handle_mcp_request(request) do
-    GenServer.call(__MODULE__, {:handle_request, request})
+    GenServer.call(__MODULE__, {:handle_request, request}, 60_000)
   end
 
   # Server callbacks
