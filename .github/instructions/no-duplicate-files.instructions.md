@@ -8,7 +8,7 @@ applyTo: '**'
 
 **NEVER** create files with adjectives or verbs that duplicate existing functionality:
 - ❌ `enhanced_mcp_server.ex` when `mcp_server.ex` exists
-- ❌ `unified_mcp_server.ex` when `mcp_server.ex` exists  
+- ❌ `unified_mcp_server.ex` when `mcp_server.ex` exists
 - ❌ `mcp_server_manager.ex` when `mcp_server.ex` exists
 - ❌ `new_config.ex` when `config.ex` exists
 - ❌ `improved_task_registry.ex` when `task_registry.ex` exists

@@ -1,7 +1,7 @@
 defmodule AgentCoordinator.MCPServer do
   @moduledoc """
   Unified MCP (Model Context Protocol) server for agent coordination.
-  
+
   This server provides:
   - Agent coordination tools for task management and communication
   - External MCP server management and unified tool access
@@ -16,7 +16,7 @@ defmodule AgentCoordinator.MCPServer do
   # State for tracking external servers and agent sessions
   defstruct [
     :external_servers,
-    :server_processes, 
+    :server_processes,
     :tool_registry,
     :agent_sessions,
     :session_monitors,
@@ -26,7 +26,7 @@ defmodule AgentCoordinator.MCPServer do
   @mcp_tools [
     %{
       "name" => "register_agent",
-      "description" => "Register a new agent with the coordination system",
+      "description" => "Register a new agent with the coordination system. Each agent must choose a unique identifier (e.g., 'Green Platypus', 'Blue Koala') and include their agent_id in all subsequent tool calls to identify themselves.",
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{
@@ -347,7 +347,7 @@ defmodule AgentCoordinator.MCPServer do
       session_monitors: %{},
       server_config: load_server_config()
     }
-    
+
     # Start external MCP servers
     {:ok, state, {:continue, :start_external_servers}}
   end
@@ -381,36 +381,57 @@ defmodule AgentCoordinator.MCPServer do
 
   def handle_call({:mcp_request, request}, from, state) do
     # Extract agent context for automatic heartbeat management
-    agent_context = extract_agent_context(request, from, state)
-    
-    # Send pre-operation heartbeat if we have agent context
-    if agent_context[:agent_id] do
-      TaskRegistry.heartbeat_agent(agent_context[:agent_id])
-      update_session_activity(agent_context[:agent_id])
-    end
-    
-    # Process the request
-    response = process_mcp_request(request)
-    
-    # Send post-operation heartbeat and update session activity
-    if agent_context[:agent_id] do
-      TaskRegistry.heartbeat_agent(agent_context[:agent_id])
-      update_session_activity(agent_context[:agent_id])
-      
-      # Add heartbeat metadata to successful responses
-      enhanced_response = case response do
-        %{"result" => _} = success ->
-          Map.put(success, "_heartbeat_metadata", %{
-            agent_id: agent_context[:agent_id],
-            timestamp: DateTime.utc_now()
-          })
-        error_result ->
-          error_result
-      end
-      
-      {:reply, enhanced_response, state}
-    else
-      {:reply, response, state}
+    case extract_agent_context(request, from, state) do
+      {:error, error_message} ->
+        # Return error if agent context extraction fails (unless this is register_agent)
+        method = Map.get(request, "method")
+        if method == "tools/call" and 
+           Map.get(request, "params", %{}) |> Map.get("name") == "register_agent" do
+          # Allow register_agent to proceed without agent_id
+          response = process_mcp_request(request)
+          {:reply, response, state}
+        else
+          error_response = %{
+            "jsonrpc" => "2.0",
+            "id" => Map.get(request, "id"),
+            "error" => %{
+              "code" => -32602,
+              "message" => error_message
+            }
+          }
+          {:reply, error_response, state}
+        end
+
+      agent_context ->
+        # Send pre-operation heartbeat if we have agent context
+        if agent_context[:agent_id] do
+          TaskRegistry.heartbeat_agent(agent_context[:agent_id])
+          update_session_activity(agent_context[:agent_id])
+        end
+
+        # Process the request
+        response = process_mcp_request(request)
+
+        # Send post-operation heartbeat and update session activity
+        if agent_context[:agent_id] do
+          TaskRegistry.heartbeat_agent(agent_context[:agent_id])
+          update_session_activity(agent_context[:agent_id])
+
+          # Add heartbeat metadata to successful responses
+          enhanced_response = case response do
+            %{"result" => _} = success ->
+              Map.put(success, "_heartbeat_metadata", %{
+                agent_id: agent_context[:agent_id],
+                timestamp: DateTime.utc_now()
+              })
+            error_result ->
+              error_result
+          end
+
+          {:reply, enhanced_response, state}
+        else
+          {:reply, response, state}
+        end
     end
   end
 
@@ -464,7 +485,7 @@ defmodule AgentCoordinator.MCPServer do
          } = request
        ) do
     id = Map.get(request, "id", nil)
-    
+
     # Determine if this is a coordinator tool or external tool
     result = route_tool_call(tool_name, args)
 
@@ -515,12 +536,18 @@ defmodule AgentCoordinator.MCPServer do
         # Add agent to codebase registry
         CodebaseRegistry.add_agent_to_codebase(agent.codebase_id, agent.id)
 
-        # Start inbox for the agent
-        {:ok, _pid} = Inbox.start_link(agent.id)
-        
+        # Start inbox for the agent (handle already started case)
+        case Inbox.start_link(agent.id) do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+          {:error, reason} -> 
+            Logger.warning("Failed to start inbox for agent #{agent.id}: #{inspect(reason)}")
+            :ok
+        end
+
         # Track the session if we have caller info
         track_agent_session(agent.id, name, capabilities)
-        
+
         {:ok, %{agent_id: agent.id, codebase_id: agent.codebase_id, status: "registered"}}
 
       {:error, reason} ->
@@ -994,7 +1021,7 @@ defmodule AgentCoordinator.MCPServer do
   end
 
   # External MCP server management functions
-  
+
   defp start_external_server(name, %{type: :stdio} = config) do
     case start_stdio_external_server(name, config) do
       {:ok, os_pid, port, pid_file_path} ->
@@ -1045,7 +1072,7 @@ defmodule AgentCoordinator.MCPServer do
       pid_file_path: nil,
       config: config
     }
-    
+
     Logger.info("Registering HTTP server: #{name} at #{Map.get(config, :url)}")
     {:ok, server_info}
   end
@@ -1279,21 +1306,21 @@ defmodule AgentCoordinator.MCPServer do
   defp get_all_unified_tools do
     # Combine coordinator tools with external server tools
     coordinator_tools = @mcp_tools
-    
+
     # Get external tools from the current process state
-    external_tools = 
+    external_tools =
       case Process.get(:external_tool_registry) do
         nil -> []
         registry -> Map.values(registry) |> List.flatten()
       end
-    
+
     coordinator_tools ++ external_tools
   end
 
   defp route_tool_call(tool_name, args) do
     # Check if it's a coordinator tool first
     coordinator_tool_names = Enum.map(@mcp_tools, & &1["name"])
-    
+
     if tool_name in coordinator_tool_names do
       handle_coordinator_tool(tool_name, args)
     else
@@ -1340,7 +1367,7 @@ defmodule AgentCoordinator.MCPServer do
       registered_at: DateTime.utc_now(),
       last_activity: DateTime.utc_now()
     }
-    
+
     # Store in process dictionary for now (could be enhanced to track caller PID)
     Process.put({:agent_session, agent_id}, session_info)
   end
@@ -1364,40 +1391,15 @@ defmodule AgentCoordinator.MCPServer do
         agent_id = request["params"]["arguments"]["agent_id"]
         %{agent_id: agent_id}
 
-      # If no explicit agent_id, try to auto-register a default agent
+      # If no explicit agent_id, return error - agents must register first
       true ->
-        default_agent_context()
+        {:error, "Missing agent_id. Agents must register themselves using register_agent before calling other tools."}
     end
   end
 
-  defp default_agent_context do
-    # Create or use a default agent session for GitHub Copilot
-    default_agent_id = "github_copilot_session"
-
-    # Check if we already have this agent in our session tracking
-    case Process.get({:agent_session, default_agent_id}) do
-      nil ->
-        # Auto-register GitHub Copilot as an agent
-        case register_agent(%{
-               "name" => "GitHub Copilot",
-               "capabilities" => ["coding", "analysis", "review", "documentation"]
-             }) do
-          {:ok, %{agent_id: agent_id}} ->
-            %{agent_id: agent_id}
-
-          _ ->
-            # Fallback to default ID even if registration fails
-            %{agent_id: default_agent_id}
-        end
-
-      _session_info ->
-        %{agent_id: default_agent_id}
-    end
-  end
-  
   defp load_server_config do
     config_file = System.get_env("MCP_CONFIG_FILE", "mcp_servers.json")
-    
+
     if File.exists?(config_file) do
       try do
         case Jason.decode!(File.read!(config_file)) do
@@ -1417,12 +1419,12 @@ defmodule AgentCoordinator.MCPServer do
       get_default_server_config()
     end
   end
-  
+
   defp normalize_server_config(config) do
     config
     |> Map.update("type", :stdio, fn
       "stdio" -> :stdio
-      "http" -> :http  
+      "http" -> :http
       type when is_atom(type) -> type
       type -> String.to_existing_atom(type)
     end)
@@ -1431,7 +1433,7 @@ defmodule AgentCoordinator.MCPServer do
       {key, value} -> {String.to_atom(key), value}
     end)
   end
-  
+
   defp get_default_server_config do
     %{
       servers: %{
@@ -1444,7 +1446,7 @@ defmodule AgentCoordinator.MCPServer do
         },
         "mcp_memory" => %{
           type: :stdio,
-          command: "bunx", 
+          command: "bunx",
           args: ["-y", "@modelcontextprotocol/server-memory"],
           auto_restart: true,
           description: "Memory and knowledge graph server"

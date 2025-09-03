@@ -10,12 +10,6 @@
             "auto_restart": true,
             "description": "Context7 library documentation server"
         },
-        "mcp_figma": {
-            "url": "http://127.0.0.1:3845/mcp",
-			"type": "http",
-            "auto_restart": true,
-            "description": "Figma design integration server"
-        },
         "mcp_filesystem": {
             "type": "stdio",
             "command": "bunx",
