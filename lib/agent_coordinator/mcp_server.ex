@@ -51,13 +51,14 @@ defmodule AgentCoordinator.MCPServer do
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{
+          "agent_id" => %{"type" => "string"},
           "id" => %{"type" => "string"},
           "name" => %{"type" => "string"},
           "workspace_path" => %{"type" => "string"},
           "description" => %{"type" => "string"},
           "metadata" => %{"type" => "object"}
         },
-        "required" => ["name", "workspace_path"]
+        "required" => ["agent_id", "name", "workspace_path"]
       }
     },
     %{
@@ -66,6 +67,7 @@ defmodule AgentCoordinator.MCPServer do
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{
+          "agent_id" => %{"type" => "string"},
           "title" => %{"type" => "string"},
           "description" => %{"type" => "string"},
           "priority" => %{"type" => "string", "enum" => ["low", "normal", "high", "urgent"]},
@@ -86,7 +88,7 @@ defmodule AgentCoordinator.MCPServer do
             }
           }
         },
-        "required" => ["title", "description"]
+        "required" => ["agent_id", "title", "description"]
       }
     },
     %{
@@ -95,6 +97,7 @@ defmodule AgentCoordinator.MCPServer do
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{
+          "agent_id" => %{"type" => "string"},
           "title" => %{"type" => "string"},
           "description" => %{"type" => "string"},
           "primary_codebase_id" => %{"type" => "string"},
@@ -107,7 +110,7 @@ defmodule AgentCoordinator.MCPServer do
             "enum" => ["sequential", "parallel", "leader_follower"]
           }
         },
-        "required" => ["title", "description", "primary_codebase_id", "affected_codebases"]
+        "required" => ["agent_id", "title", "description", "primary_codebase_id", "affected_codebases"]
       }
     },
     %{
@@ -138,8 +141,10 @@ defmodule AgentCoordinator.MCPServer do
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{
+          "agent_id" => %{"type" => "string"},
           "codebase_id" => %{"type" => "string"}
-        }
+        },
+        "required" => ["agent_id"]
       }
     },
     %{
@@ -148,9 +153,10 @@ defmodule AgentCoordinator.MCPServer do
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{
+          "agent_id" => %{"type" => "string"},
           "codebase_id" => %{"type" => "string"}
         },
-        "required" => ["codebase_id"]
+        "required" => ["agent_id", "codebase_id"]
       }
     },
     %{
@@ -158,7 +164,10 @@ defmodule AgentCoordinator.MCPServer do
       "description" => "List all registered codebases",
       "inputSchema" => %{
         "type" => "object",
-        "properties" => %{}
+        "properties" => %{
+          "agent_id" => %{"type" => "string"}
+        },
+        "required" => ["agent_id"]
       }
     },
     %{
@@ -167,12 +176,13 @@ defmodule AgentCoordinator.MCPServer do
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{
+          "agent_id" => %{"type" => "string"},
           "source_codebase_id" => %{"type" => "string"},
           "target_codebase_id" => %{"type" => "string"},
           "dependency_type" => %{"type" => "string"},
           "metadata" => %{"type" => "object"}
         },
-        "required" => ["source_codebase_id", "target_codebase_id", "dependency_type"]
+        "required" => ["agent_id", "source_codebase_id", "target_codebase_id", "dependency_type"]
       }
     },
     %{
@@ -282,6 +292,7 @@ defmodule AgentCoordinator.MCPServer do
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{
+          "agent_id" => %{"type" => "string"},
           "codebase_id" => %{
             "type" => "string",
             "description" => "Optional: filter by codebase ID"
@@ -291,7 +302,8 @@ defmodule AgentCoordinator.MCPServer do
             "default" => true,
             "description" => "Include full task details"
           }
-        }
+        },
+        "required" => ["agent_id"]
       }
     },
     %{
@@ -383,14 +395,23 @@ defmodule AgentCoordinator.MCPServer do
     # Extract agent context for automatic heartbeat management
     case extract_agent_context(request, from, state) do
       {:error, error_message} ->
-        # Return error if agent context extraction fails (unless this is register_agent)
+        # Return error if agent context extraction fails (unless this is an allowed system call)
         method = Map.get(request, "method")
-        if method == "tools/call" and 
-           Map.get(request, "params", %{}) |> Map.get("name") == "register_agent" do
-          # Allow register_agent to proceed without agent_id
+        tool_name = Map.get(request, "params", %{}) |> Map.get("name")
+
+        # Allow certain MCP system calls and register_agent to proceed without agent_id
+        allowed_without_agent = method in ["initialize", "tools/list", "notifications/initialized"] or
+          (method == "tools/call" and tool_name == "register_agent")
+
+        IO.puts(:stderr, "#{method} #{inspect(request)} #{tool_name}")
+
+        if allowed_without_agent do
+          # Allow system calls and register_agent to proceed without agent_id
           response = process_mcp_request(request)
           {:reply, response, state}
         else
+          # Log the rejected call for debugging
+          Logger.warning("Rejected call without agent_id: method=#{method}, tool=#{tool_name}")
           error_response = %{
             "jsonrpc" => "2.0",
             "id" => Map.get(request, "id"),
@@ -401,6 +422,11 @@ defmodule AgentCoordinator.MCPServer do
           }
           {:reply, error_response, state}
         end
+
+      %{agent_id: nil} ->
+        # System call without agent context
+        response = process_mcp_request(request)
+        {:reply, response, state}
 
       agent_context ->
         # Send pre-operation heartbeat if we have agent context
@@ -478,6 +504,25 @@ defmodule AgentCoordinator.MCPServer do
     }
   end
 
+  defp process_mcp_request(%{"method" => "notifications/initialized"} = request) do
+    # Handle the initialized notification - this is sent by clients after initialization
+    id = Map.get(request, "id", nil)
+
+    Logger.info("Client initialization notification received")
+
+    # For notifications, we typically don't send a response, but if there's an ID, respond
+    if id do
+      %{
+        "jsonrpc" => "2.0",
+        "id" => id,
+        "result" => %{"status" => "acknowledged"}
+      }
+    else
+      # For notifications without ID, no response is expected
+      nil
+    end
+  end
+
   defp process_mcp_request(
          %{
            "method" => "tools/call",
@@ -540,7 +585,7 @@ defmodule AgentCoordinator.MCPServer do
         case Inbox.start_link(agent.id) do
           {:ok, _pid} -> :ok
           {:error, {:already_started, _pid}} -> :ok
-          {:error, reason} -> 
+          {:error, reason} ->
             Logger.warning("Failed to start inbox for agent #{agent.id}: #{inspect(reason)}")
             :ok
         end
@@ -1382,18 +1427,25 @@ defmodule AgentCoordinator.MCPServer do
   end
 
   defp extract_agent_context(request, _from, _state) do
-    # Try to get agent_id from various sources
-    cond do
-      # From request arguments
-      Map.get(request, "params", %{})
-      |> Map.get("arguments", %{})
-      |> Map.get("agent_id") ->
-        agent_id = request["params"]["arguments"]["agent_id"]
-        %{agent_id: agent_id}
+    method = Map.get(request, "method")
 
-      # If no explicit agent_id, return error - agents must register first
-      true ->
-        {:error, "Missing agent_id. Agents must register themselves using register_agent before calling other tools."}
+    # For system calls, don't require agent_id
+    if method in ["initialize", "tools/list", "notifications/initialized"] do
+      %{agent_id: nil}  # System call, no agent context needed
+    else
+      # Try to get agent_id from various sources for non-system calls
+      cond do
+        # From request arguments
+        Map.get(request, "params", %{})
+        |> Map.get("arguments", %{})
+        |> Map.get("agent_id") ->
+          agent_id = request["params"]["arguments"]["agent_id"]
+          %{agent_id: agent_id}
+
+        # If no explicit agent_id, return error - agents must register first
+        true ->
+          {:error, "Missing agent_id. Agents must register themselves using register_agent before calling other tools."}
+      end
     end
   end
 

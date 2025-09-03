@@ -255,8 +255,6 @@ defmodule AgentCoordinator do
     Map.get(server_status, :active_servers, 0)
   end
 
-  defp count_active_servers(_), do: 0
-
   defp get_server_status do
     # This would call UnifiedMCPServer to get external server status
     # For now, return a placeholder

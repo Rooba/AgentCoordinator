@@ -340,9 +340,6 @@ defmodule AgentCoordinator.TaskRegistry do
                 # Remove from pending since it was assigned
                 final_state = %{final_state | pending_tasks: state.pending_tasks}
                 {:reply, {:ok, task}, final_state}
-
-              error ->
-                error
             end
 
           _conflicts ->
@@ -688,8 +685,6 @@ defmodule AgentCoordinator.TaskRegistry do
       :ok -> :ok
       # Inbox already stopped
       {:error, :not_found} -> :ok
-      # Continue regardless
-      _ -> :ok
     end
 
     # Publish unregistration event

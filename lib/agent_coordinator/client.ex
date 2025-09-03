@@ -20,7 +20,7 @@ defmodule AgentCoordinator.Client do
   """
 
   use GenServer
-  alias AgentCoordinator.{EnhancedMCPServer, AutoHeartbeat}
+  alias AgentCoordinator.AutoHeartbeat
 
   defstruct [
     :agent_id,
@@ -108,11 +108,11 @@ defmodule AgentCoordinator.Client do
   # Server callbacks
 
   def init(config) do
-    # Register with enhanced MCP server
-    case EnhancedMCPServer.register_agent_with_session(
+    # Register with task registry
+    case AgentCoordinator.TaskRegistry.register_agent(
            config.agent_name,
            config.capabilities,
-           self()
+           session_pid: self()
          ) do
       {:ok, agent_id} ->
         state = %__MODULE__{
@@ -186,9 +186,9 @@ defmodule AgentCoordinator.Client do
   end
 
   def handle_call(:get_task_board, _from, state) do
-    case EnhancedMCPServer.get_enhanced_task_board() do
-      {:ok, board} ->
-        {:reply, {:ok, board}, update_last_heartbeat(state)}
+    case AgentCoordinator.TaskRegistry.get_task_board() do
+      task_board when is_map(task_board) ->
+        {:reply, {:ok, task_board}, update_last_heartbeat(state)}
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
@@ -270,12 +270,10 @@ defmodule AgentCoordinator.Client do
   # Private helpers
 
   defp enhanced_mcp_call(request, state) do
-    session_info = %{
-      agent_id: state.agent_id,
-      session_pid: state.session_pid
-    }
+    # Add agent_id to the request for the MCP server
+    request_with_agent = Map.put(request, "agent_id", state.agent_id)
 
-    case EnhancedMCPServer.handle_enhanced_mcp_request(request, session_info) do
+    case AgentCoordinator.MCPServer.handle_mcp_request(request_with_agent) do
       %{"result" => %{"content" => [%{"text" => response_json}]}} = response ->
         case Jason.decode(response_json) do
           {:ok, data} ->
@@ -304,7 +302,7 @@ defmodule AgentCoordinator.Client do
       }
     }
 
-    case EnhancedMCPServer.handle_enhanced_mcp_request(request) do
+    case AgentCoordinator.MCPServer.handle_mcp_request(request) do
       %{"result" => _} -> :ok
       %{"error" => %{"message" => message}} -> {:error, message}
       _ -> {:error, :unknown_heartbeat_error}

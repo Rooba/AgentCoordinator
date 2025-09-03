@@ -36,7 +36,7 @@ When you create duplicate files:
 
 ## The Human Is Right
 
-The human specifically said: "I fucking hate it when you do this retarded shit and recreate the same file with some adjective/verb but leave the original"
+The human specifically said: "Do not re-create the same file with some adjective/verb attached while leaving the original, instead, update the code and make it better, changes are good."
 
 **Listen to them.** They prefer file replacement over duplicates.
 
