@@ -24,18 +24,11 @@ defmodule AgentCoordinator.Application do
       # Task registry with NATS integration (conditionally add persistence)
       {AgentCoordinator.TaskRegistry, nats: if(enable_persistence, do: nats_config(), else: nil)},
 
-      # MCP Server Manager (manages external MCP servers)
-      {AgentCoordinator.MCPServerManager,
-       config_file: System.get_env("MCP_CONFIG_FILE", "mcp_servers.json")},
-
-      # MCP server
+      # Unified MCP server (includes external server management, session tracking, and auto-registration)
       AgentCoordinator.MCPServer,
 
       # Auto-heartbeat manager
       AgentCoordinator.AutoHeartbeat,
-
-      # Enhanced MCP server with automatic heartbeats
-      AgentCoordinator.EnhancedMCPServer,
 
       # Dynamic supervisor for agent inboxes
       {DynamicSupervisor, name: AgentCoordinator.InboxSupervisor, strategy: :one_for_one}

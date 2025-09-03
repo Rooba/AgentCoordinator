@@ -1,11 +1,27 @@
 defmodule AgentCoordinator.MCPServer do
   @moduledoc """
-  MCP (Model Context Protocol) server for agent coordination.
-  Provides tools for agents to interact with the task coordination system.
+  Unified MCP (Model Context Protocol) server for agent coordination.
+  
+  This server provides:
+  - Agent coordination tools for task management and communication
+  - External MCP server management and unified tool access
+  - Automatic heartbeat management and session tracking
+  - Cross-codebase coordination capabilities
   """
 
   use GenServer
+  require Logger
   alias AgentCoordinator.{TaskRegistry, Inbox, Agent, Task, CodebaseRegistry}
+
+  # State for tracking external servers and agent sessions
+  defstruct [
+    :external_servers,
+    :server_processes, 
+    :tool_registry,
+    :agent_sessions,
+    :session_monitors,
+    :server_config
+  ]
 
   @mcp_tools [
     %{
@@ -323,12 +339,79 @@ defmodule AgentCoordinator.MCPServer do
   # Server callbacks
 
   def init(_opts) do
-    {:ok, %{}}
+    state = %__MODULE__{
+      external_servers: %{},
+      server_processes: %{},
+      tool_registry: %{},
+      agent_sessions: %{},
+      session_monitors: %{},
+      server_config: load_server_config()
+    }
+    
+    # Start external MCP servers
+    {:ok, state, {:continue, :start_external_servers}}
   end
 
-  def handle_call({:mcp_request, request}, _from, state) do
+  def handle_continue(:start_external_servers, state) do
+    IO.puts(:stderr, "Starting external MCP servers...")
+
+    new_state =
+      Enum.reduce(state.server_config.servers, state, fn {name, config}, acc ->
+        case start_external_server(name, config) do
+          {:ok, server_info} ->
+            IO.puts(:stderr, "Started MCP server: #{name}")
+
+            %{
+              acc
+              | external_servers: Map.put(acc.external_servers, name, server_info),
+                server_processes: Map.put(acc.server_processes, name, server_info.pid)
+            }
+
+          {:error, reason} ->
+            IO.puts(:stderr, "Failed to start MCP server #{name}: #{reason}")
+            acc
+        end
+      end)
+
+    # Build initial tool registry
+    updated_state = refresh_external_tool_registry(new_state)
+
+    {:noreply, updated_state}
+  end
+
+  def handle_call({:mcp_request, request}, from, state) do
+    # Extract agent context for automatic heartbeat management
+    agent_context = extract_agent_context(request, from, state)
+    
+    # Send pre-operation heartbeat if we have agent context
+    if agent_context[:agent_id] do
+      TaskRegistry.heartbeat_agent(agent_context[:agent_id])
+      update_session_activity(agent_context[:agent_id])
+    end
+    
+    # Process the request
     response = process_mcp_request(request)
-    {:reply, response, state}
+    
+    # Send post-operation heartbeat and update session activity
+    if agent_context[:agent_id] do
+      TaskRegistry.heartbeat_agent(agent_context[:agent_id])
+      update_session_activity(agent_context[:agent_id])
+      
+      # Add heartbeat metadata to successful responses
+      enhanced_response = case response do
+        %{"result" => _} = success ->
+          Map.put(success, "_heartbeat_metadata", %{
+            agent_id: agent_context[:agent_id],
+            timestamp: DateTime.utc_now()
+          })
+        error_result ->
+          error_result
+      end
+      
+      {:reply, enhanced_response, state}
+    else
+      {:reply, response, state}
+    end
   end
 
   # MCP request processing
@@ -342,11 +425,20 @@ defmodule AgentCoordinator.MCPServer do
       "result" => %{
         "protocolVersion" => "2024-11-05",
         "capabilities" => %{
-          "tools" => %{}
+          "tools" => %{},
+          "coordination" => %{
+            "automatic_task_tracking" => true,
+            "agent_management" => true,
+            "multi_server_proxy" => true,
+            "heartbeat_coverage" => true,
+            "session_tracking" => true
+          }
         },
         "serverInfo" => %{
-          "name" => "agent-coordinator",
-          "version" => "0.1.0"
+          "name" => "agent-coordinator-unified",
+          "version" => "0.1.0",
+          "description" =>
+            "Unified MCP server with automatic task tracking and agent coordination"
         }
       }
     }
@@ -355,10 +447,13 @@ defmodule AgentCoordinator.MCPServer do
   defp process_mcp_request(%{"method" => "tools/list"} = request) do
     id = Map.get(request, "id", nil)
 
+    # Get both coordinator tools and external server tools
+    all_tools = get_all_unified_tools()
+
     %{
       "jsonrpc" => "2.0",
       "id" => id,
-      "result" => %{"tools" => @mcp_tools}
+      "result" => %{"tools" => all_tools}
     }
   end
 
@@ -369,27 +464,9 @@ defmodule AgentCoordinator.MCPServer do
          } = request
        ) do
     id = Map.get(request, "id", nil)
-
-    result =
-      case tool_name do
-        "register_agent" -> register_agent(args)
-        "register_codebase" -> register_codebase(args)
-        "create_task" -> create_task(args)
-        "create_cross_codebase_task" -> create_cross_codebase_task(args)
-        "get_next_task" -> get_next_task(args)
-        "complete_task" -> complete_task(args)
-        "get_task_board" -> get_task_board(args)
-        "get_codebase_status" -> get_codebase_status(args)
-        "list_codebases" -> list_codebases(args)
-        "add_codebase_dependency" -> add_codebase_dependency(args)
-        "heartbeat" -> heartbeat(args)
-        "unregister_agent" -> unregister_agent(args)
-        "register_task_set" -> register_task_set(args)
-        "create_agent_task" -> create_agent_task(args)
-        "get_detailed_task_board" -> get_detailed_task_board(args)
-        "get_agent_task_history" -> get_agent_task_history(args)
-        _ -> {:error, "Unknown tool: #{tool_name}"}
-      end
+    
+    # Determine if this is a coordinator tool or external tool
+    result = route_tool_call(tool_name, args)
 
     case result do
       {:ok, data} ->
@@ -440,6 +517,10 @@ defmodule AgentCoordinator.MCPServer do
 
         # Start inbox for the agent
         {:ok, _pid} = Inbox.start_link(agent.id)
+        
+        # Track the session if we have caller info
+        track_agent_session(agent.id, name, capabilities)
+        
         {:ok, %{agent_id: agent.id, codebase_id: agent.codebase_id, status: "registered"}}
 
       {:error, reason} ->
@@ -910,5 +991,465 @@ defmodule AgentCoordinator.MCPServer do
              }}
         end
     end
+  end
+
+  # External MCP server management functions
+  
+  defp start_external_server(name, %{type: :stdio} = config) do
+    case start_stdio_external_server(name, config) do
+      {:ok, os_pid, port, pid_file_path} ->
+        # Monitor the port (not the OS PID)
+        port_ref = Port.monitor(port)
+
+        server_info = %{
+          name: name,
+          type: :stdio,
+          # Use port as the "pid" for process tracking
+          pid: port,
+          os_pid: os_pid,
+          port: port,
+          pid_file_path: pid_file_path,
+          port_ref: port_ref,
+          started_at: DateTime.utc_now(),
+          tools: []
+        }
+
+        # Initialize the server and get tools
+        case initialize_external_server(server_info) do
+          {:ok, tools} ->
+            {:ok, %{server_info | tools: tools}}
+
+          {:error, reason} ->
+            # Cleanup on initialization failure
+            cleanup_external_pid_file(pid_file_path)
+            kill_external_process(os_pid)
+            if Port.info(port), do: Port.close(port)
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp start_external_server(name, %{type: :http} = config) do
+    # For HTTP servers, we don't spawn processes - just store connection info
+    server_info = %{
+      name: name,
+      type: :http,
+      url: Map.get(config, :url),
+      # No process to track for HTTP
+      pid: nil,
+      os_pid: nil,
+      port: nil,
+      pid_file_path: nil,
+      config: config
+    }
+    
+    Logger.info("Registering HTTP server: #{name} at #{Map.get(config, :url)}")
+    {:ok, server_info}
+  end
+
+  defp start_external_server(name, config) do
+    IO.puts(:stderr, "Unsupported server type for #{name}: #{inspect(config)}")
+    {:error, "Unsupported server type"}
+  end
+
+  defp start_stdio_external_server(name, config) do
+    command = Map.get(config, :command, "npx")
+    args = Map.get(config, :args, [])
+    env = Map.get(config, :env, %{})
+
+    # Convert env map to list format expected by Port.open
+    env_list =
+      Enum.map(env, fn {key, value} -> {String.to_charlist(key), String.to_charlist(value)} end)
+
+    port_options = [
+      :binary,
+      :stream,
+      {:env, env_list},
+      :exit_status,
+      :hide
+    ]
+
+    try do
+      port =
+        Port.open(
+          {:spawn_executable, System.find_executable(command)},
+          [{:args, args} | port_options]
+        )
+
+      # Get the OS PID of the spawned process
+      {:os_pid, os_pid} = Port.info(port, :os_pid)
+
+      # Create PID file for cleanup
+      pid_file_path = create_external_pid_file(name, os_pid)
+
+      IO.puts(:stderr, "Started MCP server #{name} with OS PID #{os_pid}")
+
+      {:ok, os_pid, port, pid_file_path}
+    rescue
+      e ->
+        IO.puts(:stderr, "Failed to start stdio server #{name}: #{Exception.message(e)}")
+        {:error, Exception.message(e)}
+    end
+  end
+
+  defp initialize_external_server(server_info) do
+    # Send initialize request
+    init_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 1,
+      "method" => "initialize",
+      "params" => %{
+        "protocolVersion" => "2024-11-05",
+        "capabilities" => %{},
+        "clientInfo" => %{
+          "name" => "agent-coordinator",
+          "version" => "0.1.0"
+        }
+      }
+    }
+
+    with {:ok, _init_response} <- send_external_server_request(server_info, init_request),
+         {:ok, tools_response} <- get_external_server_tools(server_info) do
+      {:ok, tools_response}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp get_external_server_tools(server_info) do
+    tools_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 2,
+      "method" => "tools/list"
+    }
+
+    case send_external_server_request(server_info, tools_request) do
+      {:ok, %{"result" => %{"tools" => tools}}} ->
+        {:ok, tools}
+
+      {:ok, unexpected} ->
+        IO.puts(:stderr, "Unexpected tools response from #{server_info.name}: #{inspect(unexpected)}")
+        {:ok, []}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp send_external_server_request(server_info, request) do
+    request_json = Jason.encode!(request) <> "\n"
+
+    Port.command(server_info.port, request_json)
+
+    # Collect full response by reading multiple lines if needed
+    response_data = collect_external_response(server_info.port, "", 30_000)
+
+    cond do
+      response_data == "" ->
+        {:error, "No response received from server #{server_info.name}"}
+
+      true ->
+        case Jason.decode(response_data) do
+          {:ok, response} ->
+            {:ok, response}
+
+          {:error, %Jason.DecodeError{} = error} ->
+            IO.puts(:stderr, "JSON decode error for server #{server_info.name}: #{Exception.message(error)}")
+            {:error, "JSON decode error: #{Exception.message(error)}"}
+        end
+    end
+  end
+
+  defp collect_external_response(port, acc, timeout) do
+    receive do
+      {^port, {:data, data}} ->
+        new_acc = acc <> data
+        case extract_json_from_data(new_acc) do
+          {json_message, _remaining} when json_message != nil ->
+            json_message
+          {nil, remaining} ->
+            collect_external_response(port, remaining, timeout)
+        end
+
+      {^port, {:exit_status, status}} ->
+        IO.puts(:stderr, "External server exited with status: #{status}")
+        acc
+    after
+      timeout ->
+        IO.puts(:stderr, "External server request timeout after #{timeout}ms")
+        acc
+    end
+  end
+
+  defp extract_json_from_data(data) do
+    lines = String.split(data, "\n", trim: false)
+    {json_lines, _remaining_data} = extract_json_lines(lines, [])
+
+    case json_lines do
+      [] ->
+        last_line = List.last(lines) || ""
+        if String.trim(last_line) != "" and not String.ends_with?(data, "\n") do
+          {nil, last_line}
+        else
+          {nil, ""}
+        end
+
+      _ ->
+        json_data = Enum.join(json_lines, "\n")
+        case Jason.decode(json_data) do
+          {:ok, _} -> {json_data, ""}
+          {:error, _} -> {nil, data}
+        end
+    end
+  end
+
+  defp extract_json_lines([], acc), do: {Enum.reverse(acc), ""}
+
+  defp extract_json_lines([line | rest], acc) do
+    trimmed = String.trim(line)
+
+    cond do
+      trimmed == "" ->
+        extract_json_lines(rest, acc)
+
+      # Skip log messages
+      Regex.match?(~r/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/, trimmed) ->
+        extract_json_lines(rest, acc)
+
+      String.starts_with?(trimmed, ["{"]) ->
+        extract_json_lines(rest, [line | acc])
+
+      true ->
+        extract_json_lines(rest, acc)
+    end
+  end
+
+  defp refresh_external_tool_registry(state) do
+    new_registry =
+      Enum.reduce(state.external_servers, %{}, fn {name, server_info}, acc ->
+        tools = Map.get(server_info, :tools, [])
+        Map.put(acc, name, tools)
+      end)
+
+    %{state | tool_registry: new_registry}
+  end
+
+  defp create_external_pid_file(server_name, os_pid) do
+    pid_dir = Path.join(System.tmp_dir(), "mcp_servers")
+    File.mkdir_p!(pid_dir)
+
+    pid_file_path = Path.join(pid_dir, "#{server_name}.pid")
+    File.write!(pid_file_path, to_string(os_pid))
+
+    pid_file_path
+  end
+
+  defp cleanup_external_pid_file(pid_file_path) do
+    if File.exists?(pid_file_path) do
+      File.rm(pid_file_path)
+    end
+  end
+
+  defp kill_external_process(os_pid) when is_integer(os_pid) do
+    try do
+      case System.cmd("kill", ["-TERM", to_string(os_pid)]) do
+        {_, 0} ->
+          IO.puts(:stderr, "Successfully terminated process #{os_pid}")
+          :ok
+
+        {_, _} ->
+          case System.cmd("kill", ["-KILL", to_string(os_pid)]) do
+            {_, 0} ->
+              IO.puts(:stderr, "Force killed process #{os_pid}")
+              :ok
+
+            {_, _} ->
+              IO.puts(:stderr, "Failed to kill process #{os_pid}")
+              :error
+          end
+      end
+    rescue
+      _ -> :error
+    end
+  end
+
+  defp get_all_unified_tools do
+    # Combine coordinator tools with external server tools
+    coordinator_tools = @mcp_tools
+    
+    # Get external tools from the current process state
+    external_tools = 
+      case Process.get(:external_tool_registry) do
+        nil -> []
+        registry -> Map.values(registry) |> List.flatten()
+      end
+    
+    coordinator_tools ++ external_tools
+  end
+
+  defp route_tool_call(tool_name, args) do
+    # Check if it's a coordinator tool first
+    coordinator_tool_names = Enum.map(@mcp_tools, & &1["name"])
+    
+    if tool_name in coordinator_tool_names do
+      handle_coordinator_tool(tool_name, args)
+    else
+      # Try to route to external server
+      route_to_external_server(tool_name, args)
+    end
+  end
+
+  defp handle_coordinator_tool(tool_name, args) do
+    case tool_name do
+      "register_agent" -> register_agent(args)
+      "register_codebase" -> register_codebase(args)
+      "create_task" -> create_task(args)
+      "create_cross_codebase_task" -> create_cross_codebase_task(args)
+      "get_next_task" -> get_next_task(args)
+      "complete_task" -> complete_task(args)
+      "get_task_board" -> get_task_board(args)
+      "get_codebase_status" -> get_codebase_status(args)
+      "list_codebases" -> list_codebases(args)
+      "add_codebase_dependency" -> add_codebase_dependency(args)
+      "heartbeat" -> heartbeat(args)
+      "unregister_agent" -> unregister_agent(args)
+      "register_task_set" -> register_task_set(args)
+      "create_agent_task" -> create_agent_task(args)
+      "get_detailed_task_board" -> get_detailed_task_board(args)
+      "get_agent_task_history" -> get_agent_task_history(args)
+      _ -> {:error, "Unknown coordinator tool: #{tool_name}"}
+    end
+  end
+
+  defp route_to_external_server(tool_name, _args) do
+    # For now, return error for external tools
+    # This will be enhanced when we fully implement external routing
+    {:error, "External tool routing not yet implemented: #{tool_name}"}
+  end
+
+  # Session management functions
+
+  defp track_agent_session(agent_id, name, capabilities) do
+    # Store session info in process state for this session
+    session_info = %{
+      name: name,
+      capabilities: capabilities,
+      registered_at: DateTime.utc_now(),
+      last_activity: DateTime.utc_now()
+    }
+    
+    # Store in process dictionary for now (could be enhanced to track caller PID)
+    Process.put({:agent_session, agent_id}, session_info)
+  end
+
+  defp update_session_activity(agent_id) do
+    case Process.get({:agent_session, agent_id}) do
+      nil -> :ok
+      session_info ->
+        updated_session = %{session_info | last_activity: DateTime.utc_now()}
+        Process.put({:agent_session, agent_id}, updated_session)
+    end
+  end
+
+  defp extract_agent_context(request, _from, _state) do
+    # Try to get agent_id from various sources
+    cond do
+      # From request arguments
+      Map.get(request, "params", %{})
+      |> Map.get("arguments", %{})
+      |> Map.get("agent_id") ->
+        agent_id = request["params"]["arguments"]["agent_id"]
+        %{agent_id: agent_id}
+
+      # If no explicit agent_id, try to auto-register a default agent
+      true ->
+        default_agent_context()
+    end
+  end
+
+  defp default_agent_context do
+    # Create or use a default agent session for GitHub Copilot
+    default_agent_id = "github_copilot_session"
+
+    # Check if we already have this agent in our session tracking
+    case Process.get({:agent_session, default_agent_id}) do
+      nil ->
+        # Auto-register GitHub Copilot as an agent
+        case register_agent(%{
+               "name" => "GitHub Copilot",
+               "capabilities" => ["coding", "analysis", "review", "documentation"]
+             }) do
+          {:ok, %{agent_id: agent_id}} ->
+            %{agent_id: agent_id}
+
+          _ ->
+            # Fallback to default ID even if registration fails
+            %{agent_id: default_agent_id}
+        end
+
+      _session_info ->
+        %{agent_id: default_agent_id}
+    end
+  end
+  
+  defp load_server_config do
+    config_file = System.get_env("MCP_CONFIG_FILE", "mcp_servers.json")
+    
+    if File.exists?(config_file) do
+      try do
+        case Jason.decode!(File.read!(config_file)) do
+          %{"servers" => servers} ->
+            normalized_servers = Enum.into(servers, %{}, fn {name, config} ->
+              normalized_config = normalize_server_config(config)
+              {name, normalized_config}
+            end)
+            %{servers: normalized_servers}
+          _ ->
+            get_default_server_config()
+        end
+      rescue
+        _ -> get_default_server_config()
+      end
+    else
+      get_default_server_config()
+    end
+  end
+  
+  defp normalize_server_config(config) do
+    config
+    |> Map.update("type", :stdio, fn
+      "stdio" -> :stdio
+      "http" -> :http  
+      type when is_atom(type) -> type
+      type -> String.to_existing_atom(type)
+    end)
+    |> Enum.into(%{}, fn
+      {"type", type} -> {:type, type}
+      {key, value} -> {String.to_atom(key), value}
+    end)
+  end
+  
+  defp get_default_server_config do
+    %{
+      servers: %{
+        "mcp_filesystem" => %{
+          type: :stdio,
+          command: "bunx",
+          args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/ra"],
+          auto_restart: true,
+          description: "Filesystem operations server"
+        },
+        "mcp_memory" => %{
+          type: :stdio,
+          command: "bunx", 
+          args: ["-y", "@modelcontextprotocol/server-memory"],
+          auto_restart: true,
+          description: "Memory and knowledge graph server"
+        }
+      }
+    }
   end
 end

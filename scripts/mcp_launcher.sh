@@ -28,10 +28,10 @@ exec mix run --no-halt -e "
 
 # MCPServerManager is now started by the application supervisor automatically
 
-case AgentCoordinator.UnifiedMCPServer.start_link() do
+case AgentCoordinator.MCPServer.start_link() do
   {:ok, _} -> :ok
   {:error, {:already_started, _}} -> :ok
-  {:error, reason} -> raise \"Failed to start UnifiedMCPServer: #{inspect(reason)}\"
+  {:error, reason} -> raise \"Failed to start MCPServer: #{inspect(reason)}\"
 end
 
 # Log that we're ready
@@ -64,7 +64,7 @@ defmodule UnifiedMCPStdio do
       request = Jason.decode!(json_line)
 
       # Route through unified MCP server for automatic task tracking
-      response = AgentCoordinator.UnifiedMCPServer.handle_mcp_request(request)
+      response = AgentCoordinator.MCPServer.handle_mcp_request(request)
       IO.puts(Jason.encode!(response))
     rescue
       e in Jason.DecodeError ->
