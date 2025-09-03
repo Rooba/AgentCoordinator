@@ -75,13 +75,13 @@ defmodule AgentCoordinator.MCPServerManager do
   end
 
   def handle_continue(:start_servers, state) do
-    Logger.info("Starting external MCP servers...")
+    IO.puts(:stderr, "Starting external MCP servers...")
 
     new_state =
       Enum.reduce(state.config.servers, state, fn {name, config}, acc ->
         case start_server(name, config) do
           {:ok, server_info} ->
-            Logger.info("Started MCP server: #{name}")
+            IO.puts(:stderr, "Started MCP server: #{name}")
 
             %{
               acc
@@ -90,7 +90,7 @@ defmodule AgentCoordinator.MCPServerManager do
             }
 
           {:error, reason} ->
-            Logger.error("Failed to start MCP server #{name}: #{reason}")
+            IO.puts(:stderr, "Failed to start MCP server #{name}: #{reason}")
             acc
         end
       end)
@@ -187,9 +187,10 @@ defmodule AgentCoordinator.MCPServerManager do
     # Re-discover tools from all running servers
     updated_state = rediscover_all_tools(state)
 
-    all_tools = get_coordinator_tools() ++ (Map.values(updated_state.tool_registry) |> List.flatten())
+    all_tools =
+      get_coordinator_tools() ++ (Map.values(updated_state.tool_registry) |> List.flatten())
 
-    Logger.info("Refreshed tool registry: found #{length(all_tools)} total tools")
+    IO.puts(:stderr, "Refreshed tool registry: found #{length(all_tools)} total tools")
 
     {:reply, {:ok, length(all_tools)}, updated_state}
   end
@@ -198,12 +199,13 @@ defmodule AgentCoordinator.MCPServerManager do
     # Handle server port death
     case find_server_by_port(port, state.servers) do
       {server_name, server_info} ->
-        Logger.warning("MCP server #{server_name} port died: #{reason}")
+        IO.puts(:stderr, "MCP server #{server_name} port died: #{reason}")
 
         # Cleanup PID file and kill external process
         if server_info.pid_file_path do
           cleanup_pid_file(server_info.pid_file_path)
         end
+
         if server_info.os_pid do
           kill_external_process(server_info.os_pid)
         end
@@ -218,7 +220,7 @@ defmodule AgentCoordinator.MCPServerManager do
 
         # Attempt restart if configured
         if should_auto_restart?(server_name, state.config) do
-          Logger.info("Auto-restarting MCP server: #{server_name}")
+          IO.puts(:stderr, "Auto-restarting MCP server: #{server_name}")
           Process.send_after(self(), {:restart_server, server_name}, 1000)
         end
 
@@ -234,7 +236,7 @@ defmodule AgentCoordinator.MCPServerManager do
 
     case start_server(server_name, server_config) do
       {:ok, server_info} ->
-        Logger.info("Auto-restarted MCP server: #{server_name}")
+        IO.puts(:stderr, "Auto-restarted MCP server: #{server_name}")
 
         new_state = %{
           state
@@ -246,7 +248,10 @@ defmodule AgentCoordinator.MCPServerManager do
         {:noreply, updated_state}
 
       {:error, reason} ->
-        Logger.error("Failed to auto-restart MCP server #{server_name}: #{reason}")
+        IO.puts(:stderr,
+          "Failed to auto-restart MCP server #{server_name}: #{reason}"
+        )
+
         {:noreply, state}
     end
   end
@@ -257,11 +262,12 @@ defmodule AgentCoordinator.MCPServerManager do
 
   # Private functions
 
-  defp load_server_config(opts) do
+  defp load_server_config(_opts) do # We should probably use opts, but idk how to fix it, so we're using env var for a single var
     # Allow override from opts or config file
-    config_file = Keyword.get(opts, :config_file, "mcp_servers.json")
+    config_file = System.get_env("MCP_CONFIG_FILE", "mcp_servers.json")
 
     if File.exists?(config_file) do
+      IO.puts(:stderr, "Loading MCP server config from #{config_file}")
       try do
         case Jason.decode!(File.read!(config_file)) do
           %{"servers" => servers} = full_config ->
@@ -288,22 +294,30 @@ defmodule AgentCoordinator.MCPServerManager do
 
             # Add any additional config from the JSON file
             case Map.get(full_config, "config") do
-              nil -> base_config
+              nil ->
+                base_config
+
               additional_config ->
                 Map.merge(base_config, %{config: additional_config})
             end
 
           _ ->
-            Logger.warning("Invalid config file format in #{config_file}, using defaults")
+            IO.puts(:stderr,
+              "Invalid config file format in #{config_file}, using defaults"
+            )
+
             get_default_config()
         end
       rescue
         e ->
-          Logger.warning("Failed to load config file #{config_file}: #{Exception.message(e)}, using defaults")
+          IO.puts(:stderr,
+            "Failed to load config file #{config_file}: #{Exception.message(e)}, using defaults"
+          )
+
           get_default_config()
       end
     else
-      Logger.warning("Config file #{config_file} not found, using defaults")
+      IO.puts(:stderr, "Config file #{config_file} not found, using defaults")
       get_default_config()
     end
   end
@@ -320,35 +334,35 @@ defmodule AgentCoordinator.MCPServerManager do
         },
         "mcp_figma" => %{
           type: :stdio,
-          command: "npx",
+          command: "bunx",
           args: ["-y", "@figma/mcp-server-figma"],
           auto_restart: true,
           description: "Figma design integration server"
         },
         "mcp_filesystem" => %{
           type: :stdio,
-          command: "npx",
+          command: "bunx",
           args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/ra"],
           auto_restart: true,
           description: "Filesystem operations server with heartbeat coverage"
         },
         "mcp_firebase" => %{
           type: :stdio,
-          command: "npx",
+          command: "bunx",
           args: ["-y", "@firebase/mcp-server"],
           auto_restart: true,
           description: "Firebase integration server"
         },
         "mcp_memory" => %{
           type: :stdio,
-          command: "npx",
+          command: "bunx",
           args: ["-y", "@modelcontextprotocol/server-memory"],
           auto_restart: true,
           description: "Memory and knowledge graph server"
         },
         "mcp_sequentialthi" => %{
           type: :stdio,
-          command: "npx",
+          command: "bunx",
           args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
           auto_restart: true,
           description: "Sequential thinking and reasoning server"
@@ -366,7 +380,8 @@ defmodule AgentCoordinator.MCPServerManager do
         server_info = %{
           name: name,
           type: :stdio,
-          pid: port,  # Use port as the "pid" for process tracking
+          # Use port as the "pid" for process tracking
+          pid: port,
           os_pid: os_pid,
           port: port,
           pid_file_path: pid_file_path,
@@ -388,6 +403,7 @@ defmodule AgentCoordinator.MCPServerManager do
             if Port.info(port) do
               Port.close(port)
             end
+
             {:error, reason}
         end
 
@@ -402,7 +418,8 @@ defmodule AgentCoordinator.MCPServerManager do
       name: name,
       type: :http,
       url: Map.get(config, :url),
-      pid: nil,  # No process to track for HTTP
+      # No process to track for HTTP
+      pid: nil,
       os_pid: nil,
       port: nil,
       pid_file_path: nil,
@@ -427,7 +444,8 @@ defmodule AgentCoordinator.MCPServerManager do
     env = Map.get(config, :env, %{})
 
     # Convert env map to list format expected by Port.open
-    env_list = Enum.map(env, fn {key, value} -> {String.to_charlist(key), String.to_charlist(value)} end)
+    env_list =
+      Enum.map(env, fn {key, value} -> {String.to_charlist(key), String.to_charlist(value)} end)
 
     port_options = [
       :binary,
@@ -438,8 +456,11 @@ defmodule AgentCoordinator.MCPServerManager do
     ]
 
     try do
-      port = Port.open({:spawn_executable, System.find_executable(command)},
-                       [{:args, args} | port_options])
+      port =
+        Port.open(
+          {:spawn_executable, System.find_executable(command)},
+          [{:args, args} | port_options]
+        )
 
       # Get the OS PID of the spawned process
       {:os_pid, os_pid} = Port.info(port, :os_pid)
@@ -447,12 +468,15 @@ defmodule AgentCoordinator.MCPServerManager do
       # Create PID file for cleanup
       pid_file_path = create_pid_file(name, os_pid)
 
-      Logger.info("Started MCP server #{name} with OS PID #{os_pid}")
+      IO.puts(:stderr, "Started MCP server #{name} with OS PID #{os_pid}")
 
       {:ok, os_pid, port, pid_file_path}
     rescue
       e ->
-        Logger.error("Failed to start stdio server #{name}: #{Exception.message(e)}")
+        IO.puts(:stderr,
+          "Failed to start stdio server #{name}: #{Exception.message(e)}"
+        )
+
         {:error, Exception.message(e)}
     end
   end
@@ -477,16 +501,18 @@ defmodule AgentCoordinator.MCPServerManager do
     try do
       case System.cmd("kill", ["-TERM", to_string(os_pid)]) do
         {_, 0} ->
-          Logger.info("Successfully terminated process #{os_pid}")
+          IO.puts(:stderr, "Successfully terminated process #{os_pid}")
           :ok
+
         {_, _} ->
           # Try force kill
           case System.cmd("kill", ["-KILL", to_string(os_pid)]) do
             {_, 0} ->
-              Logger.info("Force killed process #{os_pid}")
+              IO.puts(:stderr, "Force killed process #{os_pid}")
               :ok
+
             {_, _} ->
-              Logger.warning("Failed to kill process #{os_pid}")
+              IO.puts(:stderr, "Failed to kill process #{os_pid}")
               :error
           end
       end
@@ -528,7 +554,10 @@ defmodule AgentCoordinator.MCPServerManager do
   defp initialize_http_server(server_info) do
     # For HTTP servers, we would make HTTP requests instead of using ports
     # For now, return empty tools list as we need to implement HTTP client logic
-    Logger.warning("HTTP server support not fully implemented yet for #{server_info.name}")
+    IO.puts(:stderr,
+      "HTTP server support not fully implemented yet for #{server_info.name}"
+    )
+
     {:ok, []}
   rescue
     e ->
@@ -547,7 +576,7 @@ defmodule AgentCoordinator.MCPServerManager do
         {:ok, tools}
 
       {:ok, unexpected} ->
-        Logger.warning(
+        IO.puts(:stderr,
           "Unexpected tools response from #{server_info.name}: #{inspect(unexpected)}"
         )
 
@@ -570,17 +599,20 @@ defmodule AgentCoordinator.MCPServerManager do
       # Check if we got any response data
       response_data == "" ->
         {:error, "No response received from server #{server_info.name}"}
-        
+
       # Try to decode JSON response
       true ->
         case Jason.decode(response_data) do
-          {:ok, response} -> {:ok, response}
+          {:ok, response} ->
+            {:ok, response}
+
           {:error, %Jason.DecodeError{} = error} ->
-            Logger.error("JSON decode error for server #{server_info.name}: #{Exception.message(error)}")
-            Logger.debug("Raw response data: #{inspect(response_data)}")
+            IO.puts(:stderr,
+              "JSON decode error for server #{server_info.name}: #{Exception.message(error)}"
+            )
+
+            IO.puts(:stderr, "Raw response data: #{inspect(response_data)}")
             {:error, "JSON decode error: #{Exception.message(error)}"}
-          {:error, reason} ->
-            {:error, "JSON decode error: #{inspect(reason)}"}
         end
     end
   end
@@ -590,25 +622,24 @@ defmodule AgentCoordinator.MCPServerManager do
       {^port, {:data, data}} ->
         # Accumulate binary data
         new_acc = acc <> data
-        
+
         # Try to extract complete JSON messages from the accumulated data
         case extract_json_messages(new_acc) do
           {json_message, _remaining} when json_message != nil ->
             # We found a complete JSON message, return it
             json_message
-            
+
           {nil, remaining} ->
             # No complete JSON message yet, continue collecting
             collect_response(port, remaining, timeout)
         end
 
       {^port, {:exit_status, status}} ->
-        Logger.error("Server exited with status: #{status}")
+        IO.puts(:stderr, "Server exited with status: #{status}")
         acc
-
     after
       timeout ->
-        Logger.error("Server request timeout after #{timeout}ms")
+        IO.puts(:stderr, "Server request timeout after #{timeout}ms")
         acc
     end
   end
@@ -616,29 +647,30 @@ defmodule AgentCoordinator.MCPServerManager do
   # Extract complete JSON messages from accumulated binary data
   defp extract_json_messages(data) do
     lines = String.split(data, "\n", trim: false)
-    
+
     # Process each line to find JSON messages and skip log messages
     {json_lines, _remaining_data} = extract_json_from_lines(lines, [])
-    
+
     case json_lines do
       [] ->
         # No complete JSON found, return the last partial line if any
         last_line = List.last(lines) || ""
+
         if String.trim(last_line) != "" and not String.ends_with?(data, "\n") do
           {nil, last_line}
         else
           {nil, ""}
         end
-        
+
       _ ->
         # Join all JSON lines and try to parse
         json_data = Enum.join(json_lines, "\n")
-        
+
         case Jason.decode(json_data) do
           {:ok, _} ->
             # Valid JSON found
             {json_data, ""}
-            
+
           {:error, _} ->
             # Invalid JSON, might be incomplete
             {nil, data}
@@ -647,55 +679,55 @@ defmodule AgentCoordinator.MCPServerManager do
   end
 
   defp extract_json_from_lines([], acc), do: {Enum.reverse(acc), ""}
-  
+
   defp extract_json_from_lines([line], acc) do
     # This is the last line, it might be incomplete
     trimmed = String.trim(line)
-    
+
     cond do
       trimmed == "" ->
         {Enum.reverse(acc), ""}
-        
+
       # Skip log messages
       Regex.match?(~r/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/, trimmed) ->
         {Enum.reverse(acc), ""}
-        
+
       Regex.match?(~r/^\d{2}:\d{2}:\d{2}\.\d+\s+\[(info|warning|error|debug)\]/, trimmed) ->
         {Enum.reverse(acc), ""}
-        
+
       # Check if this looks like JSON
       String.starts_with?(trimmed, ["{"]) ->
         {Enum.reverse([line | acc]), ""}
-        
+
       true ->
         # Non-JSON line, might be incomplete
         {Enum.reverse(acc), line}
     end
   end
-  
+
   defp extract_json_from_lines([line | rest], acc) do
     trimmed = String.trim(line)
-    
+
     cond do
       trimmed == "" ->
         extract_json_from_lines(rest, acc)
-        
+
       # Skip log messages
       Regex.match?(~r/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/, trimmed) ->
-        Logger.debug("Skipping log message from MCP server: #{trimmed}")
+        IO.puts(:stderr, "Skipping log message from MCP server: #{trimmed}")
         extract_json_from_lines(rest, acc)
-        
+
       Regex.match?(~r/^\d{2}:\d{2}:\d{2}\.\d+\s+\[(info|warning|error|debug)\]/, trimmed) ->
-        Logger.debug("Skipping log message from MCP server: #{trimmed}")
+        IO.puts(:stderr, "Skipping log message from MCP server: #{trimmed}")
         extract_json_from_lines(rest, acc)
-        
+
       # Check if this looks like JSON
       String.starts_with?(trimmed, ["{"]) ->
         extract_json_from_lines(rest, [line | acc])
-        
+
       true ->
         # Skip non-JSON lines
-        Logger.debug("Skipping non-JSON line from MCP server: #{trimmed}")
+        IO.puts(:stderr, "Skipping non-JSON line from MCP server: #{trimmed}")
         extract_json_from_lines(rest, acc)
     end
   end
@@ -715,25 +747,29 @@ defmodule AgentCoordinator.MCPServerManager do
     updated_servers =
       Enum.reduce(state.servers, state.servers, fn {name, server_info}, acc ->
         # Check if server is alive (handle both PID and Port)
-        server_alive = case server_info.pid do
-          nil -> false
-          pid when is_pid(pid) -> Process.alive?(pid)
-          port when is_port(port) -> Port.info(port) != nil
-          _ -> false
-        end
+        server_alive =
+          case server_info.pid do
+            nil -> false
+            pid when is_pid(pid) -> Process.alive?(pid)
+            port when is_port(port) -> Port.info(port) != nil
+            _ -> false
+          end
 
         if server_alive do
           case get_server_tools(server_info) do
             {:ok, new_tools} ->
-              Logger.debug("Rediscovered #{length(new_tools)} tools from #{name}")
+              IO.puts(:stderr, "Rediscovered #{length(new_tools)} tools from #{name}")
               Map.put(acc, name, %{server_info | tools: new_tools})
 
             {:error, reason} ->
-              Logger.warning("Failed to rediscover tools from #{name}: #{inspect(reason)}")
+              IO.puts(:stderr,
+                "Failed to rediscover tools from #{name}: #{inspect(reason)}"
+              )
+
               acc
           end
         else
-          Logger.warning("Server #{name} is not alive, skipping tool rediscovery")
+          IO.puts(:stderr, "Server #{name} is not alive, skipping tool rediscovery")
           acc
         end
       end)
@@ -747,6 +783,7 @@ defmodule AgentCoordinator.MCPServerManager do
     # Check all tool registries (both coordinator and external servers)
     # Start with coordinator tools
     coordinator_tools = get_coordinator_tools()
+
     if Enum.any?(coordinator_tools, fn tool -> tool["name"] == tool_name end) do
       {:coordinator, tool_name}
     else
@@ -855,18 +892,19 @@ defmodule AgentCoordinator.MCPServerManager do
     ]
 
     # Get VS Code tools only if VS Code functionality is available
-    vscode_tools = try do
-      if Code.ensure_loaded?(AgentCoordinator.VSCodeToolProvider) do
-        AgentCoordinator.VSCodeToolProvider.get_tools()
-      else
-        Logger.debug("VS Code tools not available - module not loaded")
-        []
+    vscode_tools =
+      try do
+        if Code.ensure_loaded?(AgentCoordinator.VSCodeToolProvider) do
+          AgentCoordinator.VSCodeToolProvider.get_tools()
+        else
+          IO.puts(:stderr, "VS Code tools not available - module not loaded")
+          []
+        end
+      rescue
+        _ ->
+          IO.puts(:stderr, "VS Code tools not available - error loading")
+          []
       end
-    rescue
-      _ ->
-        Logger.debug("VS Code tools not available - error loading")
-        []
-    end
 
     # Combine all coordinator tools
     coordinator_native_tools ++ vscode_tools
@@ -878,10 +916,11 @@ defmodule AgentCoordinator.MCPServerManager do
     # Route to existing Agent Coordinator functionality or VS Code tools
     case tool_name do
       "register_agent" ->
-        opts = case arguments["metadata"] do
-          nil -> []
-          metadata -> [metadata: metadata]
-        end
+        opts =
+          case arguments["metadata"] do
+            nil -> []
+            metadata -> [metadata: metadata]
+          end
 
         AgentCoordinator.TaskRegistry.register_agent(
           arguments["name"],
@@ -996,6 +1035,8 @@ defmodule AgentCoordinator.MCPServerManager do
     end
   end
 
+  # TODO: Perhaps... copilot should supply what it thinks it is doing?
+  # Or, we need to fill these out with every possible tool
   defp generate_task_title(tool_name, arguments) do
     case tool_name do
       "read_file" ->
@@ -1027,6 +1068,7 @@ defmodule AgentCoordinator.MCPServerManager do
     end
   end
 
+  # TODO: See Line [1042](#L1042)
   defp generate_task_description(tool_name, arguments) do
     case tool_name do
       "read_file" ->

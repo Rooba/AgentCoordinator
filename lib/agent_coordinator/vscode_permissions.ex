@@ -33,7 +33,8 @@ defmodule AgentCoordinator.VSCodePermissions do
     "vscode_set_selection" => :editor,
 
     # Command Operations (varies by command)
-    "vscode_run_command" => :admin,  # Default to admin, will check specific commands
+    # Default to admin, will check specific commands
+    "vscode_run_command" => :admin,
 
     # User Communication
     "vscode_show_message" => :read_only
@@ -88,6 +89,7 @@ defmodule AgentCoordinator.VSCodePermissions do
       case additional_checks(tool_name, args, context) do
         :ok ->
           {:ok, required_level}
+
         {:error, reason} ->
           {:error, reason}
       end
@@ -109,15 +111,18 @@ defmodule AgentCoordinator.VSCodePermissions do
 
     case agent_id do
       "github_copilot_session" -> :filesystem
-      id when is_binary(id) and byte_size(id) > 0 -> :editor  # Other registered agents
-      _ -> :read_only  # Unknown agents
+      # Other registered agents
+      id when is_binary(id) and byte_size(id) > 0 -> :editor
+      # Unknown agents
+      _ -> :read_only
     end
   end
 
   @doc """
   Update an agent's permission level (for administrative purposes).
   """
-  def set_agent_permission_level(agent_id, level) when level in [:read_only, :editor, :filesystem, :terminal, :git, :admin] do
+  def set_agent_permission_level(agent_id, level)
+      when level in [:read_only, :editor, :filesystem, :terminal, :git, :admin] do
     # This would persist to a database or configuration store
     Logger.info("Setting permission level for agent #{agent_id} to #{level}")
     :ok
@@ -127,16 +132,24 @@ defmodule AgentCoordinator.VSCodePermissions do
 
   defp get_required_permission(tool_name, args) do
     case Map.get(@tool_permissions, tool_name) do
-      nil -> :admin  # Unknown tools require admin by default
+      # Unknown tools require admin by default
+      nil ->
+        :admin
+
       :admin when tool_name == "vscode_run_command" ->
         # Special handling for run_command - check specific command
         command = args["command"]
+
         if command in @whitelisted_commands do
-          :editor  # Whitelisted commands only need editor level
+          # Whitelisted commands only need editor level
+          :editor
         else
-          :admin   # Unknown commands need admin
+          # Unknown commands need admin
+          :admin
         end
-      level -> level
+
+      level ->
+        level
     end
   end
 
@@ -165,11 +178,19 @@ defmodule AgentCoordinator.VSCodePermissions do
 
     forbidden_patterns = [
       # System directories
-      "/etc/", "/bin/", "/usr/", "/var/", "/tmp/",
+      "/etc/",
+      "/bin/",
+      "/usr/",
+      "/var/",
+      "/tmp/",
       # User sensitive areas
-      "/.ssh/", "/.config/", "/home/", "~",
+      "/.ssh/",
+      "/.config/",
+      "/home/",
+      "~",
       # Relative path traversal
-      "../", "..\\"
+      "../",
+      "..\\"
     ]
 
     if Enum.any?(forbidden_patterns, fn pattern -> String.contains?(path, pattern) end) do
@@ -181,7 +202,7 @@ defmodule AgentCoordinator.VSCodePermissions do
 
   defp check_workspace_bounds(_path, _context), do: {:error, "Invalid path format"}
 
-  defp check_command_safety(command, args) when is_binary(command) do
+  defp check_command_safety(command, _args) when is_binary(command) do
     cond do
       command in @whitelisted_commands ->
         :ok

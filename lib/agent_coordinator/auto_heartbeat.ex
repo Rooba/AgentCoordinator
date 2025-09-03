@@ -31,19 +31,20 @@ defmodule AgentCoordinator.AutoHeartbeat do
   """
   def register_agent_with_heartbeat(name, capabilities, agent_context \\ %{}) do
     # Convert capabilities to strings if they're atoms
-    string_capabilities = Enum.map(capabilities, fn
-      cap when is_atom(cap) -> Atom.to_string(cap)
-      cap when is_binary(cap) -> cap
-    end)
+    string_capabilities =
+      Enum.map(capabilities, fn
+        cap when is_atom(cap) -> Atom.to_string(cap)
+        cap when is_binary(cap) -> cap
+      end)
 
     # First register the agent normally
     case MCPServer.handle_mcp_request(%{
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "register_agent",
-        "arguments" => %{"name" => name, "capabilities" => string_capabilities}
-      }
-    }) do
+           "method" => "tools/call",
+           "params" => %{
+             "name" => "register_agent",
+             "arguments" => %{"name" => name, "capabilities" => string_capabilities}
+           }
+         }) do
       %{"result" => %{"content" => [%{"text" => response_json}]}} ->
         case Jason.decode(response_json) do
           {:ok, %{"agent_id" => agent_id}} ->
@@ -100,10 +101,14 @@ defmodule AgentCoordinator.AutoHeartbeat do
       "method" => "tools/call",
       "params" => %{
         "name" => "create_task",
-        "arguments" => Map.merge(%{
-          "title" => title,
-          "description" => description
-        }, opts)
+        "arguments" =>
+          Map.merge(
+            %{
+              "title" => title,
+              "description" => description
+            },
+            opts
+          )
       }
     }
 
@@ -173,9 +178,10 @@ defmodule AgentCoordinator.AutoHeartbeat do
     # Start new timer
     timer_ref = Process.send_after(self(), {:heartbeat_timer, agent_id}, @heartbeat_interval)
 
-    new_state = %{state |
-      timers: Map.put(state.timers, agent_id, timer_ref),
-      agent_contexts: Map.put(state.agent_contexts, agent_id, context)
+    new_state = %{
+      state
+      | timers: Map.put(state.timers, agent_id, timer_ref),
+        agent_contexts: Map.put(state.agent_contexts, agent_id, context)
     }
 
     {:reply, :ok, new_state}
@@ -187,9 +193,10 @@ defmodule AgentCoordinator.AutoHeartbeat do
       Process.cancel_timer(state.timers[agent_id])
     end
 
-    new_state = %{state |
-      timers: Map.delete(state.timers, agent_id),
-      agent_contexts: Map.delete(state.agent_contexts, agent_id)
+    new_state = %{
+      state
+      | timers: Map.delete(state.timers, agent_id),
+        agent_contexts: Map.delete(state.agent_contexts, agent_id)
     }
 
     {:reply, :ok, new_state}

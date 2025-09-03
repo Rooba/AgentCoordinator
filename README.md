@@ -1,68 +1,214 @@
-# AgentCoordinator
+# Agent Coordinator
 
-[![Elixir CI](https://github.com/your-username/agent_coordinator/workflows/CI/badge.svg)](https://github.com/your-username/agent_coordinator/actions)
-[![Coverage Status](https://coveralls.io/repos/github/your-username/agent_coordinator/badge.svg?branch=main)](https://coveralls.io/github/your-username/agent_coordinator?branch=main)
-[![Hex.pm](https://img.shields.io/hexpm/v/agent_coordinator.svg)](https://hex.pm/packages/agent_coordinator)
+A **Model Context Protocol (MCP) server** that enables multiple AI agents to coordinate their work seamlessly across codebases without conflicts. Built with Elixir for reliability and fault tolerance.
 
-A distributed task coordination system for AI agents built with Elixir and NATS.
+## 🎯 What is Agent Coordinator?
 
-## 🚀 Overview
+Agent Coordinator is an MCP server that solves the problem of multiple AI agents stepping on each other's toes when working on the same codebase. Instead of agents conflicting over files or duplicating work, they can register with the coordinator, receive tasks, and collaborate intelligently.
 
-AgentCoordinator enables multiple AI agents (Claude Code, GitHub Copilot, etc.) to work collaboratively on the same codebase without conflicts. It provides:
+**Key Features:**
 
-- **🎯 Distributed Task Management**: Centralized task queue with agent-specific inboxes
-- **🔒 Conflict Resolution**: File-level locking prevents agents from working on the same files
-- **⚡ Real-time Communication**: NATS messaging for instant coordination
-- **💾 Persistent Storage**: Event sourcing with configurable retention policies
-- **🔌 MCP Integration**: Model Context Protocol server for agent communication
-- **🛡️ Fault Tolerance**: Elixir supervision trees ensure system resilience
+- **🤖 Multi-Agent Coordination**: Register multiple AI agents (GitHub Copilot, Claude, etc.) with different capabilities
+- **� Unified MCP Proxy**: Single MCP server that manages and unifies multiple external MCP servers
+- **📡 External Server Management**: Automatically starts, monitors, and manages MCP servers defined in `mcp_servers.json`
+- **🛠️ Universal Tool Registry**: Combines tools from all external servers with native coordination tools
+- **🎯 Intelligent Tool Routing**: Automatically routes tool calls to the appropriate server or handles natively
+- **📝 Automatic Task Tracking**: Every tool usage becomes a tracked task with agent coordination
+- **⚡ Real-Time Communication**: Agents can communicate and share progress via heartbeat system
+- **🔌 Dynamic Tool Discovery**: Automatically discovers new tools when external servers start/restart
+- **🎮 Cross-Codebase Support**: Coordinate work across multiple repositories and projects
+- **🔌 MCP Standard Compliance**: Works with any MCP-compatible AI agent or tool
 
-## 🏗️ Architecture
+## 🚀 How It Works
 
+```ascii
+                        ┌────────────────────────────┐
+                        │AI AGENTS & TOOLS CONNECTION│
+                        └────────────────────────────┘
+    Agent 1 (Purple Zebra)   Agent 2(Yellow Elephant)    Agent N (...)
+           │                        │                            │
+           └────────────MCP Protocol┼(Single Interface)──────────┘
+                                    │
+    ┌───────────────────────────────┴──────────────────────────────────┐
+    │               AGENT COORDINATOR (Unified MCP Server)             │
+    ├──────────────────────────────────────────────────────────────────┤
+    │  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────┐  │
+    │  │  Task Registry  │  │ Agent Manager   │  │Codebase Registry │  │
+    │  ├─────────────────┤  ├─────────────────┤  ├──────────────────┤  │
+    │  │• Task Queuing   │  │• Registration   │  │• Cross-Repo      │  │
+    │  │• Agent Matching │  │• Heartbeat      │  │• Dependencies    │  │
+    │  │• Auto-Tracking  │  │• Capabilities   │  │• Workspace Mgmt  │  │
+    │  └─────────────────┘  └─────────────────┘  └──────────────────┘  │
+    │  ┌─────────────────────────────────────────────────────────────┐ │
+    │  │                    UNIFIED TOOL REGISTRY                    │ │
+    │  ├─────────────────────────────────────────────────────────────┤ │
+    │  │ Native Tools:      register_agent, get_next_task,           │ │
+    │  │                    create_task_set, complete_task, ...      │ │
+    │  │ Proxied MCP Tools: read_file, write_file,                   │ │
+    │  │                    search_memory, get_docs, ...             │ │
+    │  │ VS Code Tools:     get_active_editor, set_selection,        │ │
+    │  │                    get_workspace_folders, run_command, ...  │ │
+    │  ├─────────────────────────────────────────────────────────────┤ │
+    │  │       Routes to appropriate server or handles natively      │ │
+    │  │       Configure MCP Servers to run via MCP_TOOLS_FILE                     │ │
+    │  └─────────────────────────────────────────────────────────────┘ │
+    └─────────────────────────────────┬────────────────────────────────┘
+                                      │
+                                      │
+                                      │
+    ┌─────────────────────────────────┴─────────────────────────────────────┐
+    │                         EXTERNAL MCP SERVERS                          │
+    └──────────────┬─────────┬─────────┬─────────┬─────────┬─────────┬──────┤
+         │         │         │         │         │         │         │      │
+    ┌────┴───┐     │    ┌────┴───┐     │    ┌────┴───┐     │    ┌────┴───┐  │
+    │  MCP 1 │     │    │  MCP 2 │     │    │  MCP 3 │     │    │  MCP 4 │  │
+    ├────────┤     │    ├────────┤     │    ├────────┤     │    ├────────┤  │
+    │• tool 1│     │    │• tool 1│     │    │• tool 1│     │    │• tool 1│  │
+    │• tool 2│     │    │• tool 2│     │    │• tool 2│     │    │• tool 2│  │
+    │• tool 3│┌────┴───┐│• tool 3│┌────┴───┐│• tool 3│┌────┴───┐│• tool 3│┌─┴──────┐
+    └────────┘│  MCP 5 │└────────┘│  MCP 6 │└────────┘│  MCP 7 │└────────┘│  MCP 8 │
+              ├────────┤          ├────────┤          ├────────┤          ├────────┤
+              │• tool 1│          │• tool 1│          │• tool 1│          │• tool 1│
+              │• tool 2│          │• tool 2│          │• tool 2│          │• tool 2│
+              │• tool 3│          │• tool 3│          │• tool 3│          │• tool 3│
+              └────────┘          └────────┘          └────────┘          └────────┘
+
+
+
+    🔥 WHAT HAPPENS:
+    1. Agent Coordinator reads mcp_servers.json config
+    2. Spawns & initializes all external MCP servers
+    3. Discovers tools from each server via MCP protocol
+    4. Builds unified tool registry (native + external)
+    5. Presents single MCP interface to AI agents
+    6. Routes tool calls to appropriate servers
+    7. Automatically tracks all operations as tasks
+    8. Maintains heartbeat & coordination across agents
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   AI Agent 1    │    │   AI Agent 2     │    │   AI Agent N    │
-│  (Claude Code)  │    │   (Copilot)      │    │      ...        │
-└─────────┬───────┘    └─────────┬────────┘    └─────────┬───────┘
-          │                      │                       │
-          └──────────────────────┼───────────────────────┘
-                                 │
-                    ┌─────────────┴──────────────┐
-                    │    MCP Server Interface    │
-                    └─────────────┬──────────────┘
-                                 │
-                    ┌─────────────┴──────────────┐
-                    │    AgentCoordinator        │
-                    │                            │
-                    │  ┌──────────────────────┐  │
-                    │  │   Task Registry      │  │
-                    │  │   ┌──────────────┐   │  │
-                    │  │   │ Agent Inbox  │   │  │
-                    │  │   │ Agent Inbox  │   │  │
-                    │  │   │ Agent Inbox  │   │  │
-                    │  │   └──────────────┘   │  │
-                    │  └──────────────────────┘  │
-                    │                            │
-                    │  ┌──────────────────────┐  │
-                    │  │   NATS Messaging     │  │
-                    │  └──────────────────────┘  │
-                    │                            │
-                    │  ┌──────────────────────┐  │
-                    │  │   Persistence        │  │
-                    │  │   (JetStream)        │  │
-                    │  └──────────────────────┘  │
-                    └────────────────────────────┘
+
+## 🔧 MCP Server Management & Unified Tool Registry
+
+Agent Coordinator acts as a **unified MCP proxy server** that manages multiple external MCP servers while providing its own coordination capabilities. This creates a single, powerful interface for AI agents to access hundreds of tools seamlessly.
+
+### 📡 External Server Management
+
+The coordinator automatically manages external MCP servers based on configuration in `mcp_servers.json`:
+
+```json
+{
+  "servers": {
+    "mcp_filesystem": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/ra"],
+      "auto_restart": true,
+      "description": "Filesystem operations server"
+    },
+    "mcp_memory": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "auto_restart": true,
+      "description": "Memory and knowledge graph server"
+    },
+    "mcp_figma": {
+      "type": "http",
+      "url": "http://127.0.0.1:3845/mcp",
+      "auto_restart": true,
+      "description": "Figma design integration server"
+    }
+  },
+  "config": {
+    "startup_timeout": 30000,
+    "heartbeat_interval": 10000,
+    "auto_restart_delay": 1000,
+    "max_restart_attempts": 3
+  }
+}
 ```
 
-## 📋 Prerequisites
+**Server Lifecycle Management:**
 
-- **Elixir**: 1.16+ 
-- **Erlang/OTP**: 26+
-- **NATS Server**: With JetStream enabled
+1. **🚀 Startup**: Reads config and spawns each external server process
+2. **🔍 Discovery**: Sends MCP `initialize` and `tools/list` requests to discover available tools
+3. **📋 Registration**: Adds discovered tools to the unified tool registry
+4. **💓 Monitoring**: Continuously monitors server health and heartbeat
+5. **🔄 Auto-Restart**: Automatically restarts failed servers (if configured)
+6. **🛡️ Cleanup**: Properly terminates processes and cleans up resources on shutdown
+
+### 🛠️ Unified Tool Registry
+
+The coordinator combines tools from multiple sources into a single, coherent interface:
+
+**Native Coordination Tools:**
+
+- `register_agent` - Register agents with capabilities
+- `create_task` - Create coordination tasks
+- `get_next_task` - Get assigned tasks
+- `complete_task` - Mark tasks complete
+- `get_task_board` - View all agent status
+- `heartbeat` - Maintain agent liveness
+
+**External Server Tools (Auto-Discovered):**
+
+- **Filesystem**: `read_file`, `write_file`, `list_directory`, `search_files`
+- **Memory**: `search_nodes`, `store_memory`, `recall_information`
+- **Context7**: `get-library-docs`, `search-docs`, `get-library-info`
+- **Figma**: `get_code`, `get_designs`, `fetch_assets`
+- **Sequential Thinking**: `sequentialthinking`, `analyze_problem`
+- **VS Code**: `run_command`, `install_extension`, `open_file`, `create_task`
+
+**Dynamic Discovery Process:**
+
+```ascii
+┌─────────────────┐    MCP Protocol    ┌─────────────────┐
+│ Agent           │ ──────────────────▶│ Agent           │
+│ Coordinator     │                    │ Coordinator     │
+│                 │ initialize         │                 │
+│ 1. Starts       │◀─────────────────  │ 2. Responds     │
+│    External     │                    │    with info    │
+│    Server       │ tools/list         │                 │
+│                 │ ──────────────────▶│ 3. Returns      │
+│ 4. Registers    │                    │    tool list    │
+│    Tools        │◀─────────────────  │                 │
+└─────────────────┘                    └─────────────────┘
+```
+
+### 🎯 Intelligent Tool Routing
+
+When an AI agent calls a tool, the coordinator intelligently routes the request:
+
+**Routing Logic:**
+
+1. **Native Tools**: Handled directly by Agent Coordinator modules
+2. **External Tools**: Routed to the appropriate external MCP server
+3. **VS Code Tools**: Routed to integrated VS Code Tool Provider
+4. **Unknown Tools**: Return helpful error with available alternatives
+
+**Automatic Task Tracking:**
+
+- Every tool call automatically creates or updates agent tasks
+- Maintains context of what agents are working on
+- Provides visibility into cross-agent coordination
+- Enables intelligent task distribution and conflict prevention
+
+**Example Tool Call Flow:**
+
+```bash
+Agent calls "read_file" → Coordinator routes to filesystem server →
+Updates agent task → Sends heartbeat → Returns file content
+```
+
+## 🛠️ Prerequisites
+
+You need these installed to run Agent Coordinator:
+
+- **Elixir**: 1.16+ with OTP 26+
+- **Mix**: Comes with Elixir installation
 
 ## ⚡ Quick Start
 
-### 1. Clone and Setup
+### 1. Get the Code
 
 ```bash
 git clone https://github.com/your-username/agent_coordinator.git
@@ -70,55 +216,19 @@ cd agent_coordinator
 mix deps.get
 ```
 
-### 2. Start NATS Server
+### 2. Start the MCP Server
 
 ```bash
-# Using Docker (recommended)
-docker run -p 4222:4222 -p 8222:8222 nats:latest -js
+# Start the MCP server directly
+./scripts/mcp_launcher.sh
 
-# Or install locally and run
-nats-server -js -p 4222 -m 8222
+# Or in development mode
+mix run --no-halt
 ```
 
-### 3. Run the Application
+### 3. Configure Your AI Tools
 
-```bash
-# Start in development mode
-iex -S mix
-
-# Or use the provided setup script
-./scripts/setup.sh
-```
-
-### 4. Test the MCP Server
-
-```bash
-# Run example demo
-mix run examples/demo_mcp_server.exs
-
-# Or test with Python client
-python3 examples/mcp_client_example.py
-```
-
-## 🔧 Configuration
-
-### Environment Variables
-
-```bash
-export NATS_HOST=localhost
-export NATS_PORT=4222
-export MIX_ENV=dev
-```
-
-### VS Code Integration
-
-Run the setup script to configure VS Code automatically:
-
-```bash
-./scripts/setup.sh
-```
-
-Or manually configure your VS Code `settings.json`:
+The agent coordinator is designed to work with VS Code and AI tools that support MCP. Add this to your VS Code `settings.json`:
 
 ```json
 {
@@ -129,9 +239,7 @@ Or manually configure your VS Code `settings.json`:
           "command": "/path/to/agent_coordinator/scripts/mcp_launcher.sh",
           "args": [],
           "env": {
-            "MIX_ENV": "dev",
-            "NATS_HOST": "localhost",
-            "NATS_PORT": "4222"
+            "MIX_ENV": "dev"
           }
         }
       }
@@ -140,54 +248,59 @@ Or manually configure your VS Code `settings.json`:
 }
 ```
 
-## 🎮 Usage
-
-### Command Line Interface
+### 4. Test It Works
 
 ```bash
-# Register an agent
-mix run -e "AgentCoordinator.CLI.main([\"register\", \"CodeBot\", \"coding\", \"testing\"])"
-
-# Create a task
-mix run -e "AgentCoordinator.CLI.main([\"create-task\", \"Fix login bug\", \"User login fails\", \"priority=high\"])"
-
-# View task board
-mix run -e "AgentCoordinator.CLI.main([\"board\"])"
+# Run the demo to see it in action
+mix run examples/full_workflow_demo.exs
 ```
 
-### MCP Integration
+## 🎮 How to Use
 
-Available MCP tools for agents:
+Once your AI agents are connected via MCP, they can:
 
-- `register_agent` - Register a new agent with capabilities
-- `create_task` - Create a new task with priority and requirements
-- `get_next_task` - Get the next available task for an agent
-- `complete_task` - Mark the current task as completed
-- `get_task_board` - View all agents and their current status
-- `heartbeat` - Send agent heartbeat to maintain active status
+### Register as an Agent
 
-### API Example
+```bash
+# An agent identifies itself with capabilities
+register_agent("GitHub Copilot", ["coding", "testing"], codebase_id: "my-project")
+```
 
-```elixir
-# Register an agent
-{:ok, agent_id} = AgentCoordinator.register_agent("MyAgent", ["coding", "testing"])
+### Create Tasks
 
-# Create a task
-{:ok, task_id} = AgentCoordinator.create_task(
-  "Implement user authentication", 
-  "Add JWT-based authentication to the API",
-  priority: :high,
-  required_capabilities: ["coding", "security"]
+```bash
+# Tasks are created with requirements
+create_task("Fix login bug", "Authentication fails on mobile",
+  priority: "high",
+  required_capabilities: ["coding", "debugging"]
 )
-
-# Get next task for agent
-{:ok, task} = AgentCoordinator.get_next_task(agent_id)
-
-# Complete the task
-:ok = AgentCoordinator.complete_task(agent_id, "Authentication implemented successfully")
 ```
 
-## 🧪 Development
+### Coordinate Automatically
+
+The coordinator automatically:
+
+- **Matches** tasks to agents based on capabilities
+- **Queues** tasks when no suitable agents are available
+- **Tracks** agent heartbeats to ensure they're still working
+- **Handles** cross-codebase tasks that span multiple repositories
+
+### Available MCP Tools
+
+All MCP-compatible AI agents get these tools automatically:
+
+| Tool | Purpose |
+|------|---------|
+| `register_agent` | Register an agent with capabilities |
+| `create_task` | Create a new task with requirements |
+| `get_next_task` | Get the next task assigned to an agent |
+| `complete_task` | Mark current task as completed |
+| `get_task_board` | View all agents and their status |
+| `heartbeat` | Send agent heartbeat to stay active |
+| `register_codebase` | Register a new codebase/repository |
+| `create_cross_codebase_task` | Create tasks spanning multiple repos |
+
+## 🧪 Development & Testing
 
 ### Running Tests
 
@@ -198,8 +311,9 @@ mix test
 # Run with coverage
 mix test --cover
 
-# Run specific test file
-mix test test/agent_coordinator/mcp_server_test.exs
+# Try the examples
+mix run examples/full_workflow_demo.exs
+mix run examples/auto_heartbeat_demo.exs
 ```
 
 ### Code Quality
@@ -211,47 +325,76 @@ mix format
 # Run static analysis
 mix credo
 
-# Run Dialyzer for type checking
+# Type checking
 mix dialyzer
 ```
 
-### Available Scripts
-
-- `scripts/setup.sh` - Complete environment setup
-- `scripts/mcp_launcher.sh` - Start MCP server
-- `scripts/minimal_test.sh` - Quick functionality test
-- `scripts/quick_test.sh` - Comprehensive test suite
-
 ## 📁 Project Structure
 
-```
+```text
 agent_coordinator/
-├── lib/                    # Application source code
-│   ├── agent_coordinator.ex
+├── lib/
+│   ├── agent_coordinator.ex           # Main module
 │   └── agent_coordinator/
-│       ├── agent.ex
-│       ├── application.ex
-│       ├── cli.ex
-│       ├── inbox.ex
-│       ├── mcp_server.ex
-│       ├── persistence.ex
-│       ├── task_registry.ex
-│       └── task.ex
-├── test/                   # Test files
-├── examples/               # Example implementations
-│   ├── demo_mcp_server.exs
-│   ├── mcp_client_example.py
-│   └── full_workflow_demo.exs
-├── scripts/                # Utility scripts
-│   ├── setup.sh
-│   ├── mcp_launcher.sh
-│   └── minimal_test.sh
-├── mix.exs                 # Project configuration
-├── README.md               # This file
-└── CHANGELOG.md            # Version history
+│       ├── mcp_server.ex             # MCP protocol implementation
+│       ├── task_registry.ex          # Task management
+│       ├── agent.ex                  # Agent management
+│       ├── codebase_registry.ex      # Multi-repository support
+│       └── application.ex            # Application supervisor
+├── examples/                         # Working examples
+├── test/                            # Test suite
+├── scripts/                         # Helper scripts
+└── docs/                            # Technical documentation
+    ├── README.md                    # Documentation index
+    ├── AUTO_HEARTBEAT.md            # Unified MCP server details
+    ├── VSCODE_TOOL_INTEGRATION.md   # VS Code integration
+    └── LANGUAGE_IMPLEMENTATIONS.md  # Alternative language guides
 ```
 
+## 🤔 Why This Design?
+
+**The Problem**: Multiple AI agents working on the same codebase step on each other, duplicate work, or create conflicts.
+
+**The Solution**: A coordination layer that:
+
+- Lets agents register their capabilities
+- Intelligently distributes tasks
+- Tracks progress and prevents conflicts
+- Scales across multiple repositories
+
+**Why Elixir?**: Built-in concurrency, fault tolerance, and excellent for coordination systems.
+
+## 🚀 Alternative Implementations
+
+While this Elixir version works great, you might want to consider these languages for broader adoption:
+
+### Go Implementation
+
+- **Pros**: Single binary deployment, great performance, large community
+- **Cons**: More verbose concurrency patterns
+- **Best for**: Teams wanting simple deployment and good performance
+
+### Python Implementation
+
+- **Pros**: Huge ecosystem, familiar to most developers, excellent tooling
+- **Cons**: GIL limitations for true concurrency
+- **Best for**: AI/ML teams already using Python ecosystem
+
+### Rust Implementation
+
+- **Pros**: Maximum performance, memory safety, growing adoption
+- **Cons**: Steeper learning curve, smaller ecosystem
+- **Best for**: Performance-critical deployments
+
+### Node.js Implementation
+
+- **Pros**: JavaScript familiarity, event-driven nature fits coordination
+- **Cons**: Single-threaded limitations, callback complexity
+- **Best for**: Web teams already using Node.js
+
 ## 🤝 Contributing
+
+Contributions are welcome! Here's how:
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
@@ -259,7 +402,7 @@ agent_coordinator/
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and development process.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## 📄 License
 
@@ -267,16 +410,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- [NATS](https://nats.io/) for providing the messaging infrastructure
+- [Model Context Protocol](https://modelcontextprotocol.io/) for the agent communication standard
 - [Elixir](https://elixir-lang.org/) community for the excellent ecosystem
-- [Model Context Protocol](https://modelcontextprotocol.io/) for agent communication standards
-
-## 📞 Support
-
-- 📖 [Documentation](https://hexdocs.pm/agent_coordinator)
-- 🐛 [Issue Tracker](https://github.com/your-username/agent_coordinator/issues)
-- 💬 [Discussions](https://github.com/your-username/agent_coordinator/discussions)
+- AI development teams pushing the boundaries of collaborative coding
 
 ---
 
-Made with ❤️ by the AgentCoordinator team
+**Agent Coordinator** - Making AI agents work together, not against each other.

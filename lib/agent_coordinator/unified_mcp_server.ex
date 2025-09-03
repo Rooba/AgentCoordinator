@@ -37,7 +37,7 @@ defmodule AgentCoordinator.UnifiedMCPServer do
       request_id_counter: 0
     }
 
-    Logger.info("Unified MCP Server starting...")
+    IO.puts(:stderr, "Unified MCP Server starting...")
 
     {:ok, state}
   end

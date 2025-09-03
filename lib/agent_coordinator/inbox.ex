@@ -29,27 +29,27 @@ defmodule AgentCoordinator.Inbox do
   end
 
   def add_task(agent_id, task) do
-    GenServer.call(via_tuple(agent_id), {:add_task, task})
+    GenServer.call(via_tuple(agent_id), {:add_task, task}, 30_000)
   end
 
   def get_next_task(agent_id) do
-    GenServer.call(via_tuple(agent_id), :get_next_task)
+    GenServer.call(via_tuple(agent_id), :get_next_task, 15_000)
   end
 
   def complete_current_task(agent_id) do
-    GenServer.call(via_tuple(agent_id), :complete_current_task)
+    GenServer.call(via_tuple(agent_id), :complete_current_task, 30_000)
   end
 
   def get_status(agent_id) do
-    GenServer.call(via_tuple(agent_id), :get_status)
+    GenServer.call(via_tuple(agent_id), :get_status, 15_000)
   end
 
   def list_tasks(agent_id) do
-    GenServer.call(via_tuple(agent_id), :list_tasks)
+    GenServer.call(via_tuple(agent_id), :list_tasks, 15_000)
   end
 
   def get_current_task(agent_id) do
-    GenServer.call(via_tuple(agent_id), :get_current_task)
+    GenServer.call(via_tuple(agent_id), :get_current_task, 15_000)
   end
 
   def stop(agent_id) do

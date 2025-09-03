@@ -18,13 +18,15 @@ defmodule AgentCoordinator.Application do
       {Phoenix.PubSub, name: AgentCoordinator.PubSub},
 
       # Codebase registry for multi-codebase coordination
-      {AgentCoordinator.CodebaseRegistry, nats: if(enable_persistence, do: nats_config(), else: nil)},
+      {AgentCoordinator.CodebaseRegistry,
+       nats: if(enable_persistence, do: nats_config(), else: nil)},
 
       # Task registry with NATS integration (conditionally add persistence)
       {AgentCoordinator.TaskRegistry, nats: if(enable_persistence, do: nats_config(), else: nil)},
 
       # MCP Server Manager (manages external MCP servers)
-      {AgentCoordinator.MCPServerManager, config_file: Application.get_env(:agent_coordinator, :mcp_config_file, "mcp_servers.json")},
+      {AgentCoordinator.MCPServerManager,
+       config_file: System.get_env("MCP_CONFIG_FILE", "mcp_servers.json")},
 
       # MCP server
       AgentCoordinator.MCPServer,

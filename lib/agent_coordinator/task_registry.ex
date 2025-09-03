@@ -24,11 +24,11 @@ defmodule AgentCoordinator.TaskRegistry do
   end
 
   def register_agent(agent) do
-    GenServer.call(__MODULE__, {:register_agent, agent})
+    GenServer.call(__MODULE__, {:register_agent, agent}, 30_000)
   end
 
   def assign_task(task) do
-    GenServer.call(__MODULE__, {:assign_task, task})
+    GenServer.call(__MODULE__, {:assign_task, task}, 30_000)
   end
 
   def add_to_pending(task) do
@@ -40,7 +40,7 @@ defmodule AgentCoordinator.TaskRegistry do
   end
 
   def heartbeat_agent(agent_id) do
-    GenServer.call(__MODULE__, {:heartbeat_agent, agent_id})
+    GenServer.call(__MODULE__, {:heartbeat_agent, agent_id}, 30_000)
   end
 
   def unregister_agent(agent_id, reason \\ "Agent requested unregistration") do
@@ -52,7 +52,7 @@ defmodule AgentCoordinator.TaskRegistry do
   end
 
   def get_agent_current_task(agent_id) do
-    GenServer.call(__MODULE__, {:get_agent_current_task, agent_id})
+    GenServer.call(__MODULE__, {:get_agent_current_task, agent_id}, 15_000)
   end
 
   def get_agent(agent_id) do
@@ -64,11 +64,11 @@ defmodule AgentCoordinator.TaskRegistry do
   end
 
   def update_task_activity(task_id, tool_name, arguments) do
-    GenServer.call(__MODULE__, {:update_task_activity, task_id, tool_name, arguments})
+    GenServer.call(__MODULE__, {:update_task_activity, task_id, tool_name, arguments}, 30_000)
   end
 
   def create_task(title, description, opts \\ %{}) do
-    GenServer.call(__MODULE__, {:create_task, title, description, opts})
+    GenServer.call(__MODULE__, {:create_task, title, description, opts}, 30_000)
   end
 
   def get_next_task(agent_id) do
@@ -76,7 +76,7 @@ defmodule AgentCoordinator.TaskRegistry do
   end
 
   def complete_task(agent_id) do
-    GenServer.call(__MODULE__, {:complete_task, agent_id})
+    GenServer.call(__MODULE__, {:complete_task, agent_id}, 30_000)
   end
 
   def get_task_board do
@@ -284,6 +284,7 @@ defmodule AgentCoordinator.TaskRegistry do
     case Map.get(state.agents, agent_id) do
       nil ->
         {:reply, {:error, :not_found}, state}
+
       agent ->
         {:reply, {:ok, agent}, state}
     end
@@ -293,6 +294,7 @@ defmodule AgentCoordinator.TaskRegistry do
     case Enum.find(state.agents, fn {_id, agent} -> agent.name == agent_name end) do
       nil ->
         {:reply, {:error, :not_found}, state}
+
       {_id, agent} ->
         {:reply, {:ok, agent}, state}
     end
@@ -559,6 +561,7 @@ defmodule AgentCoordinator.TaskRegistry do
             catch
               :exit, _ -> 0
             end
+
           [] ->
             # No inbox process exists, treat as 0 pending tasks
             0

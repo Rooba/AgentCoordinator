@@ -95,9 +95,6 @@ defmodule AgentCoordinator.Persistence do
       case Gnat.pub(state.nats_conn, subject, message, headers: event_headers()) do
         :ok ->
           :ok
-
-        {:error, reason} ->
-          IO.puts("Failed to store event: #{inspect(reason)}")
       end
     end
 

@@ -74,16 +74,18 @@ defmodule AgentCoordinator.Agent do
 
   def can_handle?(agent, task) do
     # Check if agent is in the same codebase or can handle cross-codebase tasks
-    codebase_compatible = agent.codebase_id == task.codebase_id or
-                         Map.get(agent.metadata, :cross_codebase_capable, false)
-    
+    codebase_compatible =
+      agent.codebase_id == task.codebase_id or
+        Map.get(agent.metadata, :cross_codebase_capable, false)
+
     # Simple capability matching - can be enhanced
     required_capabilities = Map.get(task.metadata, :required_capabilities, [])
 
-    capability_match = case required_capabilities do
-      [] -> true
-      caps -> Enum.any?(caps, fn cap -> cap in agent.capabilities end)
-    end
+    capability_match =
+      case required_capabilities do
+        [] -> true
+        caps -> Enum.any?(caps, fn cap -> cap in agent.capabilities end)
+      end
 
     codebase_compatible and capability_match
   end

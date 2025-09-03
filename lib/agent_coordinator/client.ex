@@ -110,10 +110,10 @@ defmodule AgentCoordinator.Client do
   def init(config) do
     # Register with enhanced MCP server
     case EnhancedMCPServer.register_agent_with_session(
-      config.agent_name,
-      config.capabilities,
-      self()
-    ) do
+           config.agent_name,
+           config.capabilities,
+           self()
+         ) do
       {:ok, agent_id} ->
         state = %__MODULE__{
           agent_id: agent_id,
@@ -151,10 +151,14 @@ defmodule AgentCoordinator.Client do
   end
 
   def handle_call({:create_task, title, description, opts}, _from, state) do
-    arguments = Map.merge(%{
-      "title" => title,
-      "description" => description
-    }, opts)
+    arguments =
+      Map.merge(
+        %{
+          "title" => title,
+          "description" => description
+        },
+        opts
+      )
 
     request = %{
       "method" => "tools/call",

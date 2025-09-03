@@ -5,7 +5,10 @@ defmodule AgentCoordinator.AutoHeartbeatTest do
   setup do
     # Start necessary services for testing
     {:ok, _} = Registry.start_link(keys: :unique, name: AgentCoordinator.InboxRegistry)
-    {:ok, _} = DynamicSupervisor.start_link(name: AgentCoordinator.InboxSupervisor, strategy: :one_for_one)
+
+    {:ok, _} =
+      DynamicSupervisor.start_link(name: AgentCoordinator.InboxSupervisor, strategy: :one_for_one)
+
     {:ok, _} = TaskRegistry.start_link()
     {:ok, _} = AgentCoordinator.MCPServer.start_link()
     {:ok, _} = AgentCoordinator.AutoHeartbeat.start_link()
@@ -17,7 +20,11 @@ defmodule AgentCoordinator.AutoHeartbeatTest do
   describe "automatic heartbeat functionality" do
     test "agent automatically sends heartbeats during operations" do
       # Start a client with auto-heartbeat
-      {:ok, client} = Client.start_session("TestAgent", [:coding], auto_heartbeat: true, heartbeat_interval: 1000)
+      {:ok, client} =
+        Client.start_session("TestAgent", [:coding],
+          auto_heartbeat: true,
+          heartbeat_interval: 1000
+        )
 
       # Get initial session info
       {:ok, initial_info} = Client.get_session_info(client)
@@ -36,7 +43,11 @@ defmodule AgentCoordinator.AutoHeartbeatTest do
 
     test "agent stays online with regular heartbeats" do
       # Start client
-      {:ok, client} = Client.start_session("OnlineAgent", [:analysis], auto_heartbeat: true, heartbeat_interval: 500)
+      {:ok, client} =
+        Client.start_session("OnlineAgent", [:analysis],
+          auto_heartbeat: true,
+          heartbeat_interval: 500
+        )
 
       # Get agent info
       {:ok, session_info} = Client.get_session_info(client)
@@ -70,17 +81,20 @@ defmodule AgentCoordinator.AutoHeartbeatTest do
       assert length(online_agents) >= 3
 
       # Create tasks from different agents simultaneously
-      task1 = Task.async(fn ->
-        Client.create_task(agent1, "Task1", "Description1", %{"priority" => "normal"})
-      end)
+      task1 =
+        Task.async(fn ->
+          Client.create_task(agent1, "Task1", "Description1", %{"priority" => "normal"})
+        end)
 
-      task2 = Task.async(fn ->
-        Client.create_task(agent2, "Task2", "Description2", %{"priority" => "high"})
-      end)
+      task2 =
+        Task.async(fn ->
+          Client.create_task(agent2, "Task2", "Description2", %{"priority" => "high"})
+        end)
 
-      task3 = Task.async(fn ->
-        Client.create_task(agent3, "Task3", "Description3", %{"priority" => "low"})
-      end)
+      task3 =
+        Task.async(fn ->
+          Client.create_task(agent3, "Task3", "Description3", %{"priority" => "low"})
+        end)
 
       # All tasks should complete successfully
       {:ok, result1} = Task.await(task1)
@@ -145,6 +159,7 @@ defmodule AgentCoordinator.AutoHeartbeatTest do
         nil ->
           # Agent was cleaned up - this is acceptable
           :ok
+
         agent ->
           # Agent should be offline
           refute agent["online"]

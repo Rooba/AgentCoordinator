@@ -18,7 +18,8 @@ defmodule AgentCoordinator.VSCodeToolProvider do
       # File Operations
       %{
         "name" => "vscode_read_file",
-        "description" => "Read file contents using VS Code's file system API. Only works within workspace folders.",
+        "description" =>
+          "Read file contents using VS Code's file system API. Only works within workspace folders.",
         "inputSchema" => %{
           "type" => "object",
           "properties" => %{
@@ -37,7 +38,8 @@ defmodule AgentCoordinator.VSCodeToolProvider do
       },
       %{
         "name" => "vscode_write_file",
-        "description" => "Write content to a file using VS Code's file system API. Creates directories if needed.",
+        "description" =>
+          "Write content to a file using VS Code's file system API. Creates directories if needed.",
         "inputSchema" => %{
           "type" => "object",
           "properties" => %{
@@ -93,7 +95,8 @@ defmodule AgentCoordinator.VSCodeToolProvider do
           "properties" => %{
             "path" => %{
               "type" => "string",
-              "description" => "Relative or absolute path to the file/directory within the workspace"
+              "description" =>
+                "Relative or absolute path to the file/directory within the workspace"
             },
             "recursive" => %{
               "type" => "boolean",
@@ -101,7 +104,8 @@ defmodule AgentCoordinator.VSCodeToolProvider do
             },
             "use_trash" => %{
               "type" => "boolean",
-              "description" => "Whether to move to trash instead of permanent deletion (default: true)"
+              "description" =>
+                "Whether to move to trash instead of permanent deletion (default: true)"
             }
           },
           "required" => ["path"]
@@ -227,7 +231,8 @@ defmodule AgentCoordinator.VSCodeToolProvider do
       # Command Operations
       %{
         "name" => "vscode_run_command",
-        "description" => "Execute a VS Code command. Only whitelisted commands are allowed for security.",
+        "description" =>
+          "Execute a VS Code command. Only whitelisted commands are allowed for security.",
         "inputSchema" => %{
           "type" => "object",
           "properties" => %{
@@ -282,21 +287,26 @@ defmodule AgentCoordinator.VSCodeToolProvider do
     required = Map.get(input_schema, "required", [])
 
     # Add agent_id to properties
-    updated_properties = Map.put(properties, "agent_id", %{
-      "type" => "string",
-      "description" => "Unique identifier for the agent making this request. Each agent session must use a consistent, unique ID throughout their interaction. Generate a UUID or use a descriptive identifier like 'agent_main_task_001'."
-    })
+    updated_properties =
+      Map.put(properties, "agent_id", %{
+        "type" => "string",
+        "description" =>
+          "Unique identifier for the agent making this request. Each agent session must use a consistent, unique ID throughout their interaction. Generate a UUID or use a descriptive identifier like 'agent_main_task_001'."
+      })
 
     # Add agent_id to required fields
     updated_required = if "agent_id" in required, do: required, else: ["agent_id" | required]
 
     # Update the tool schema
-    updated_input_schema = input_schema
-                          |> Map.put("properties", updated_properties)
-                          |> Map.put("required", updated_required)
+    updated_input_schema =
+      input_schema
+      |> Map.put("properties", updated_properties)
+      |> Map.put("required", updated_required)
 
     # Update tool description to mention agent_id requirement
-    updated_description = tool["description"] <> " IMPORTANT: Include a unique agent_id parameter to identify your agent session."
+    updated_description =
+      tool["description"] <>
+        " IMPORTANT: Include a unique agent_id parameter to identify your agent session."
 
     tool
     |> Map.put("inputSchema", updated_input_schema)
@@ -314,10 +324,13 @@ defmodule AgentCoordinator.VSCodeToolProvider do
 
     if is_nil(agent_id) or agent_id == "" do
       Logger.warning("Missing agent_id in VS Code tool call: #{tool_name}")
-      {:error, %{
-        "error" => "Missing agent_id",
-        "message" => "All VS Code tools require a unique agent_id parameter. Please include your agent session identifier."
-      }}
+
+      {:error,
+       %{
+         "error" => "Missing agent_id",
+         "message" =>
+           "All VS Code tools require a unique agent_id parameter. Please include your agent session identifier."
+       }}
     else
       # Ensure agent is registered and create enhanced context
       enhanced_context = ensure_agent_registered(agent_id, context)
@@ -364,7 +377,11 @@ defmodule AgentCoordinator.VSCodeToolProvider do
         case AgentCoordinator.TaskRegistry.register_agent(
                "GitHub Copilot (#{agent_id})",
                capabilities,
-               [metadata: %{agent_id: agent_id, auto_registered: true, session_start: DateTime.utc_now()}]
+               metadata: %{
+                 agent_id: agent_id,
+                 auto_registered: true,
+                 session_start: DateTime.utc_now()
+               }
              ) do
           {:ok, _result} ->
             Logger.info("Successfully auto-registered agent: #{agent_id}")
@@ -372,10 +389,13 @@ defmodule AgentCoordinator.VSCodeToolProvider do
 
           {:error, reason} ->
             Logger.error("Failed to auto-register agent #{agent_id}: #{inspect(reason)}")
-            Map.put(context, :agent_id, agent_id)  # Continue anyway
+            # Continue anyway
+            Map.put(context, :agent_id, agent_id)
         end
     end
-  end  # Private function to execute individual tools
+  end
+
+  # Private function to execute individual tools
   defp execute_tool(tool_name, args, context) do
     case tool_name do
       "vscode_read_file" -> read_file(args, context)
@@ -398,117 +418,129 @@ defmodule AgentCoordinator.VSCodeToolProvider do
 
   defp read_file(args, _context) do
     # For now, return a placeholder - we'll implement the actual VS Code API bridge
-    {:ok, %{
-      "content" => "// VS Code file content would be here",
-      "path" => args["path"],
-      "encoding" => args["encoding"] || "utf8",
-      "size" => 42,
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-    }}
+    {:ok,
+     %{
+       "content" => "// VS Code file content would be here",
+       "path" => args["path"],
+       "encoding" => args["encoding"] || "utf8",
+       "size" => 42,
+       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+     }}
   end
 
   defp write_file(args, _context) do
-    {:ok, %{
-      "path" => args["path"],
-      "bytes_written" => String.length(args["content"]),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-    }}
+    {:ok,
+     %{
+       "path" => args["path"],
+       "bytes_written" => String.length(args["content"]),
+       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+     }}
   end
 
   defp create_file(args, _context) do
-    {:ok, %{
-      "path" => args["path"],
-      "created" => true,
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-    }}
+    {:ok,
+     %{
+       "path" => args["path"],
+       "created" => true,
+       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+     }}
   end
 
   defp delete_file(args, _context) do
-    {:ok, %{
-      "path" => args["path"],
-      "deleted" => true,
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-    }}
+    {:ok,
+     %{
+       "path" => args["path"],
+       "deleted" => true,
+       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+     }}
   end
 
   defp list_directory(args, _context) do
-    {:ok, %{
-      "path" => args["path"],
-      "entries" => [
-        %{"name" => "file1.txt", "type" => "file", "size" => 123},
-        %{"name" => "subdir", "type" => "directory", "size" => nil}
-      ]
-    }}
+    {:ok,
+     %{
+       "path" => args["path"],
+       "entries" => [
+         %{"name" => "file1.txt", "type" => "file", "size" => 123},
+         %{"name" => "subdir", "type" => "directory", "size" => nil}
+       ]
+     }}
   end
 
   defp get_workspace_folders(_args, _context) do
-    {:ok, %{
-      "folders" => [
-        %{"name" => "agent_coordinator", "uri" => "file:///home/ra/agent_coordinator"}
-      ]
-    }}
+    {:ok,
+     %{
+       "folders" => [
+         %{"name" => "agent_coordinator", "uri" => "file:///home/ra/agent_coordinator"}
+       ]
+     }}
   end
 
   defp get_active_editor(args, _context) do
-    {:ok, %{
-      "file_path" => "/home/ra/agent_coordinator/lib/agent_coordinator.ex",
-      "language" => "elixir",
-      "line_count" => 150,
-      "content" => if(args["include_content"], do: "// Editor content here", else: nil),
-      "selection" => %{
-        "start" => %{"line" => 10, "character" => 5},
-        "end" => %{"line" => 10, "character" => 15}
-      },
-      "cursor_position" => %{"line" => 10, "character" => 15}
-    }}
+    {:ok,
+     %{
+       "file_path" => "/home/ra/agent_coordinator/lib/agent_coordinator.ex",
+       "language" => "elixir",
+       "line_count" => 150,
+       "content" => if(args["include_content"], do: "// Editor content here", else: nil),
+       "selection" => %{
+         "start" => %{"line" => 10, "character" => 5},
+         "end" => %{"line" => 10, "character" => 15}
+       },
+       "cursor_position" => %{"line" => 10, "character" => 15}
+     }}
   end
 
   defp set_editor_content(args, _context) do
-    {:ok, %{
-      "file_path" => args["file_path"],
-      "content_length" => String.length(args["content"]),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-    }}
+    {:ok,
+     %{
+       "file_path" => args["file_path"],
+       "content_length" => String.length(args["content"]),
+       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+     }}
   end
 
   defp get_selection(args, _context) do
-    {:ok, %{
-      "selection" => %{
-        "start" => %{"line" => 5, "character" => 0},
-        "end" => %{"line" => 8, "character" => 20}
-      },
-      "content" => if(args["include_content"], do: "Selected text here", else: nil),
-      "is_empty" => false
-    }}
+    {:ok,
+     %{
+       "selection" => %{
+         "start" => %{"line" => 5, "character" => 0},
+         "end" => %{"line" => 8, "character" => 20}
+       },
+       "content" => if(args["include_content"], do: "Selected text here", else: nil),
+       "is_empty" => false
+     }}
   end
 
   defp set_selection(args, _context) do
-    {:ok, %{
-      "selection" => %{
-        "start" => %{"line" => args["start_line"], "character" => args["start_character"]},
-        "end" => %{"line" => args["end_line"], "character" => args["end_character"]}
-      },
-      "revealed" => args["reveal"] != false
-    }}
+    {:ok,
+     %{
+       "selection" => %{
+         "start" => %{"line" => args["start_line"], "character" => args["start_character"]},
+         "end" => %{"line" => args["end_line"], "character" => args["end_character"]}
+       },
+       "revealed" => args["reveal"] != false
+     }}
   end
 
   defp run_command(args, _context) do
     # This would execute actual VS Code commands
-    {:ok, %{
-      "command" => args["command"],
-      "args" => args["args"] || [],
-      "result" => "Command executed successfully",
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-    }}
+    {:ok,
+     %{
+       "command" => args["command"],
+       "args" => args["args"] || [],
+       "result" => "Command executed successfully",
+       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+     }}
   end
 
   defp show_message(args, _context) do
-    {:ok, %{
-      "message" => args["message"],
-      "type" => args["type"] || "info",
-      "displayed" => true,
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-    }}
+    {:ok,
+     %{
+       "message" => args["message"],
+       "type" => args["type"] || "info",
+       "displayed" => true,
+       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+     }}
   end
 
   # Logging function

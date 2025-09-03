@@ -16,11 +16,12 @@ defmodule AgentCoordinator.MetadataTest do
       agent_name = "MetadataTestAgent_#{:rand.uniform(1000)}"
 
       # Register agent with metadata
-      result = AgentCoordinator.TaskRegistry.register_agent(
-        agent_name,
-        ["coding", "testing", "vscode_integration"],
-        [metadata: metadata]
-      )
+      result =
+        AgentCoordinator.TaskRegistry.register_agent(
+          agent_name,
+          ["coding", "testing", "vscode_integration"],
+          metadata: metadata
+        )
 
       assert :ok = result
 
@@ -44,10 +45,11 @@ defmodule AgentCoordinator.MetadataTest do
       agent_name = "LegacyTestAgent_#{:rand.uniform(1000)}"
 
       # Register agent without metadata (old way)
-      result = AgentCoordinator.TaskRegistry.register_agent(
-        agent_name,
-        ["coding", "testing"]
-      )
+      result =
+        AgentCoordinator.TaskRegistry.register_agent(
+          agent_name,
+          ["coding", "testing"]
+        )
 
       assert :ok = result
 
@@ -67,11 +69,12 @@ defmodule AgentCoordinator.MetadataTest do
         boolean: true
       }
 
-      agent = AgentCoordinator.Agent.new(
-        "TestAgent",
-        ["capability1"],
-        [metadata: metadata]
-      )
+      agent =
+        AgentCoordinator.Agent.new(
+          "TestAgent",
+          ["capability1"],
+          metadata: metadata
+        )
 
       assert agent.metadata[:test_key] == "test_value"
       assert agent.metadata[:number] == 42

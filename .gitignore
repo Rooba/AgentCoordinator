@@ -40,6 +40,7 @@ Thumbs.db
 logs/
 /tmp/nats.log
 /tmp/nats.pid
+firebase-debug.log
 
 # Environment and configuration files
 .env
@@ -91,3 +92,5 @@ coverage/
 
 # Claude settings (local configuration)
 .claude/
+
+/docs/LANGUAGE_IMPLEMENTATIONS.md

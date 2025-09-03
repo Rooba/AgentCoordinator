@@ -8,9 +8,9 @@ AgentCoordinator MCP server programmatically.
 
 import json
 import subprocess
-import sys
 import uuid
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 
 class AgentCoordinatorMCP:
     def __init__(self, launcher_path: str = "./scripts/mcp_launcher.sh"):

@@ -172,12 +172,134 @@ defmodule AgentCoordinator.MCPServer do
     },
     %{
       "name" => "unregister_agent",
-      "description" => "Unregister an agent from the coordination system (e.g., when waiting for user input)",
+      "description" =>
+        "Unregister an agent from the coordination system (e.g., when waiting for user input)",
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{
           "agent_id" => %{"type" => "string"},
           "reason" => %{"type" => "string"}
+        },
+        "required" => ["agent_id"]
+      }
+    },
+    %{
+      "name" => "register_task_set",
+      "description" =>
+        "Register a planned set of tasks for an agent to enable workflow coordination",
+      "inputSchema" => %{
+        "type" => "object",
+        "properties" => %{
+          "agent_id" => %{
+            "type" => "string",
+            "description" => "ID of the agent registering the task set"
+          },
+          "task_set" => %{
+            "type" => "array",
+            "description" => "Array of tasks to register for this agent",
+            "items" => %{
+              "type" => "object",
+              "properties" => %{
+                "title" => %{"type" => "string", "description" => "Task title"},
+                "description" => %{"type" => "string", "description" => "Task description"},
+                "priority" => %{
+                  "type" => "string",
+                  "enum" => ["low", "normal", "high", "urgent"],
+                  "default" => "normal"
+                },
+                "estimated_time" => %{
+                  "type" => "string",
+                  "description" => "Estimated completion time"
+                },
+                "file_paths" => %{
+                  "type" => "array",
+                  "items" => %{"type" => "string"},
+                  "description" => "Files this task will work on"
+                },
+                "required_capabilities" => %{
+                  "type" => "array",
+                  "items" => %{"type" => "string"},
+                  "description" => "Capabilities required for this task"
+                }
+              },
+              "required" => ["title", "description"]
+            }
+          }
+        },
+        "required" => ["agent_id", "task_set"]
+      }
+    },
+    %{
+      "name" => "create_agent_task",
+      "description" =>
+        "Create a task specifically for a particular agent (not globally assigned)",
+      "inputSchema" => %{
+        "type" => "object",
+        "properties" => %{
+          "agent_id" => %{"type" => "string", "description" => "ID of the agent this task is for"},
+          "title" => %{"type" => "string", "description" => "Task title"},
+          "description" => %{"type" => "string", "description" => "Detailed task description"},
+          "priority" => %{
+            "type" => "string",
+            "enum" => ["low", "normal", "high", "urgent"],
+            "default" => "normal"
+          },
+          "estimated_time" => %{"type" => "string", "description" => "Estimated completion time"},
+          "file_paths" => %{
+            "type" => "array",
+            "items" => %{"type" => "string"},
+            "description" => "Files this task will work on"
+          },
+          "required_capabilities" => %{
+            "type" => "array",
+            "items" => %{"type" => "string"},
+            "description" => "Capabilities required for this task"
+          }
+        },
+        "required" => ["agent_id", "title", "description"]
+      }
+    },
+    %{
+      "name" => "get_detailed_task_board",
+      "description" =>
+        "Get detailed task information for all agents including completed, current, and planned tasks",
+      "inputSchema" => %{
+        "type" => "object",
+        "properties" => %{
+          "codebase_id" => %{
+            "type" => "string",
+            "description" => "Optional: filter by codebase ID"
+          },
+          "include_task_details" => %{
+            "type" => "boolean",
+            "default" => true,
+            "description" => "Include full task details"
+          }
+        }
+      }
+    },
+    %{
+      "name" => "get_agent_task_history",
+      "description" => "Get detailed task history for a specific agent",
+      "inputSchema" => %{
+        "type" => "object",
+        "properties" => %{
+          "agent_id" => %{"type" => "string", "description" => "ID of the agent"},
+          "include_planned" => %{
+            "type" => "boolean",
+            "default" => true,
+            "description" => "Include planned/pending tasks"
+          },
+          "include_completed" => %{
+            "type" => "boolean",
+            "default" => true,
+            "description" => "Include completed tasks"
+          },
+          "limit" => %{
+            "type" => "number",
+            "default" => 50,
+            "description" => "Maximum number of tasks to return"
+          }
         },
         "required" => ["agent_id"]
       }
@@ -213,6 +335,7 @@ defmodule AgentCoordinator.MCPServer do
 
   defp process_mcp_request(%{"method" => "initialize"} = request) do
     id = Map.get(request, "id", nil)
+
     %{
       "jsonrpc" => "2.0",
       "id" => id,
@@ -231,6 +354,7 @@ defmodule AgentCoordinator.MCPServer do
 
   defp process_mcp_request(%{"method" => "tools/list"} = request) do
     id = Map.get(request, "id", nil)
+
     %{
       "jsonrpc" => "2.0",
       "id" => id,
@@ -260,6 +384,10 @@ defmodule AgentCoordinator.MCPServer do
         "add_codebase_dependency" -> add_codebase_dependency(args)
         "heartbeat" -> heartbeat(args)
         "unregister_agent" -> unregister_agent(args)
+        "register_task_set" -> register_task_set(args)
+        "create_agent_task" -> create_agent_task(args)
+        "get_detailed_task_board" -> get_detailed_task_board(args)
+        "get_agent_task_history" -> get_agent_task_history(args)
         _ -> {:error, "Unknown tool: #{tool_name}"}
       end
 
@@ -282,6 +410,7 @@ defmodule AgentCoordinator.MCPServer do
 
   defp process_mcp_request(request) do
     id = Map.get(request, "id", nil)
+
     %{
       "jsonrpc" => "2.0",
       "id" => id,
@@ -343,7 +472,13 @@ defmodule AgentCoordinator.MCPServer do
 
     case TaskRegistry.assign_task(task) do
       {:ok, agent_id} ->
-        {:ok, %{task_id: task.id, assigned_to: agent_id, codebase_id: task.codebase_id, status: "assigned"}}
+        {:ok,
+         %{
+           task_id: task.id,
+           assigned_to: agent_id,
+           codebase_id: task.codebase_id,
+           status: "assigned"
+         }}
 
       {:error, :no_available_agents} ->
         # Add to global pending queue
@@ -383,7 +518,11 @@ defmodule AgentCoordinator.MCPServer do
             }
           ]
 
-          Task.new("#{title} (#{codebase_id})", "Cross-codebase task: #{description}", dependent_opts)
+          Task.new(
+            "#{title} (#{codebase_id})",
+            "Cross-codebase task: #{description}",
+            dependent_opts
+          )
         end
       end)
       |> Enum.filter(&(&1 != nil))
@@ -394,20 +533,28 @@ defmodule AgentCoordinator.MCPServer do
     results =
       Enum.map(all_tasks, fn task ->
         case TaskRegistry.assign_task(task) do
-          {:ok, agent_id} -> %{task_id: task.id, codebase_id: task.codebase_id, agent_id: agent_id, status: "assigned"}
+          {:ok, agent_id} ->
+            %{
+              task_id: task.id,
+              codebase_id: task.codebase_id,
+              agent_id: agent_id,
+              status: "assigned"
+            }
+
           {:error, :no_available_agents} ->
             TaskRegistry.add_to_pending(task)
             %{task_id: task.id, codebase_id: task.codebase_id, status: "queued"}
         end
       end)
 
-    {:ok, %{
-      main_task_id: main_task.id,
-      primary_codebase: primary_codebase,
-      coordination_strategy: strategy,
-      tasks: results,
-      status: "created"
-    }}
+    {:ok,
+     %{
+       main_task_id: main_task.id,
+       primary_codebase: primary_codebase,
+       coordination_strategy: strategy,
+       tasks: results,
+       status: "created"
+     }}
   end
 
   defp get_next_task(%{"agent_id" => agent_id}) do
@@ -511,17 +658,24 @@ defmodule AgentCoordinator.MCPServer do
     {:ok, %{codebases: codebase_summaries}}
   end
 
-  defp add_codebase_dependency(%{"source_codebase_id" => source, "target_codebase_id" => target, "dependency_type" => dep_type} = args) do
+  defp add_codebase_dependency(
+         %{
+           "source_codebase_id" => source,
+           "target_codebase_id" => target,
+           "dependency_type" => dep_type
+         } = args
+       ) do
     metadata = Map.get(args, "metadata", %{})
 
     case CodebaseRegistry.add_cross_codebase_dependency(source, target, dep_type, metadata) do
       :ok ->
-        {:ok, %{
-          source_codebase: source,
-          target_codebase: target,
-          dependency_type: dep_type,
-          status: "added"
-        }}
+        {:ok,
+         %{
+           source_codebase: source,
+           target_codebase: target,
+           dependency_type: dep_type,
+           status: "added"
+         }}
 
       {:error, reason} ->
         {:error, "Failed to add dependency: #{reason}"}
@@ -547,6 +701,214 @@ defmodule AgentCoordinator.MCPServer do
 
       {:error, reason} ->
         {:error, "Unregister failed: #{reason}"}
+    end
+  end
+
+  # NEW: Agent-specific task management functions
+
+  defp register_task_set(%{"agent_id" => agent_id, "task_set" => task_set}) do
+    case TaskRegistry.get_agent(agent_id) do
+      {:error, :not_found} ->
+        {:error, "Agent not found: #{agent_id}"}
+
+      {:ok, _agent} ->
+        # Create tasks specifically for this agent
+        created_tasks =
+          Enum.map(task_set, fn task_data ->
+            opts = %{
+              priority: String.to_atom(Map.get(task_data, "priority", "normal")),
+              # Use agent's codebase
+              codebase_id: "default",
+              file_paths: Map.get(task_data, "file_paths", []),
+              metadata: %{
+                agent_created: true,
+                estimated_time: Map.get(task_data, "estimated_time"),
+                required_capabilities: Map.get(task_data, "required_capabilities", [])
+              }
+            }
+
+            task = Task.new(task_data["title"], task_data["description"], opts)
+
+            # Add directly to agent's inbox (not global pool)
+            case Inbox.add_task(agent_id, task) do
+              :ok -> task
+              {:error, reason} -> {:error, reason}
+            end
+          end)
+
+        # Check for any errors
+        case Enum.find(created_tasks, fn result -> match?({:error, _}, result) end) do
+          nil ->
+            task_summaries =
+              Enum.map(created_tasks, fn task ->
+                %{
+                  task_id: task.id,
+                  title: task.title,
+                  priority: task.priority,
+                  estimated_time: task.metadata[:estimated_time]
+                }
+              end)
+
+            {:ok,
+             %{
+               agent_id: agent_id,
+               registered_tasks: length(created_tasks),
+               task_set: task_summaries,
+               status: "registered"
+             }}
+
+          {:error, reason} ->
+            {:error, "Failed to register task set: #{reason}"}
+        end
+    end
+  end
+
+  defp create_agent_task(
+         %{"agent_id" => agent_id, "title" => title, "description" => description} = args
+       ) do
+    case TaskRegistry.get_agent(agent_id) do
+      {:error, :not_found} ->
+        {:error, "Agent not found: #{agent_id}"}
+
+      {:ok, _agent} ->
+        opts = %{
+          priority: String.to_atom(Map.get(args, "priority", "normal")),
+          # Use agent's codebase
+          codebase_id: "default",
+          file_paths: Map.get(args, "file_paths", []),
+          metadata: %{
+            agent_created: true,
+            estimated_time: Map.get(args, "estimated_time"),
+            required_capabilities: Map.get(args, "required_capabilities", [])
+          }
+        }
+
+        task = Task.new(title, description, opts)
+
+        # Add directly to agent's inbox
+        case Inbox.add_task(agent_id, task) do
+          :ok ->
+            {:ok,
+             %{
+               task_id: task.id,
+               agent_id: agent_id,
+               title: task.title,
+               priority: task.priority,
+               status: "created_for_agent"
+             }}
+
+          {:error, reason} ->
+            {:error, "Failed to create agent task: #{reason}"}
+        end
+    end
+  end
+
+  defp get_detailed_task_board(args) do
+    codebase_id = Map.get(args, "codebase_id")
+    include_details = Map.get(args, "include_task_details", true)
+    agents = TaskRegistry.list_agents()
+
+    # Filter agents by codebase if specified
+    filtered_agents =
+      case codebase_id do
+        nil -> agents
+        id -> Enum.filter(agents, fn agent -> agent.codebase_id == id end)
+      end
+
+    detailed_board =
+      Enum.map(filtered_agents, fn agent ->
+        # Get detailed task information
+        task_info =
+          case Inbox.list_tasks(agent.id) do
+            {:error, _} ->
+              %{pending: [], in_progress: nil, completed: []}
+
+            tasks ->
+              if include_details do
+                tasks
+              else
+                # Just counts like before
+                %{
+                  pending_count: length(tasks.pending),
+                  in_progress: if(tasks.in_progress, do: 1, else: 0),
+                  completed_count: length(tasks.completed)
+                }
+              end
+          end
+
+        %{
+          agent_id: agent.id,
+          name: agent.name,
+          capabilities: agent.capabilities,
+          status: agent.status,
+          codebase_id: agent.codebase_id,
+          workspace_path: agent.workspace_path,
+          online: Agent.is_online?(agent),
+          cross_codebase_capable: Agent.can_work_cross_codebase?(agent),
+          last_heartbeat: agent.last_heartbeat,
+          tasks: task_info
+        }
+      end)
+
+    {:ok,
+     %{
+       agents: detailed_board,
+       codebase_filter: codebase_id,
+       timestamp: DateTime.utc_now()
+     }}
+  end
+
+  defp get_agent_task_history(%{"agent_id" => agent_id} = args) do
+    include_planned = Map.get(args, "include_planned", true)
+    include_completed = Map.get(args, "include_completed", true)
+    limit = Map.get(args, "limit", 50)
+
+    case TaskRegistry.get_agent(agent_id) do
+      {:error, :not_found} ->
+        {:error, "Agent not found: #{agent_id}"}
+
+      {:ok, agent} ->
+        case Inbox.list_tasks(agent_id) do
+          {:error, reason} ->
+            {:error, "Failed to get task history: #{reason}"}
+
+          task_data ->
+            history = %{}
+
+            # Add planned tasks if requested
+            history =
+              if include_planned do
+                Map.put(history, :planned_tasks, Enum.take(task_data.pending, limit))
+              else
+                history
+              end
+
+            # Add current task
+            history =
+              if task_data.in_progress do
+                Map.put(history, :current_task, task_data.in_progress)
+              else
+                history
+              end
+
+            # Add completed tasks if requested
+            history =
+              if include_completed do
+                Map.put(history, :completed_tasks, Enum.take(task_data.completed, limit))
+              else
+                history
+              end
+
+            {:ok,
+             %{
+               agent_id: agent_id,
+               agent_name: agent.name,
+               history: history,
+               total_planned: length(task_data.pending),
+               total_completed: length(task_data.completed),
+               timestamp: DateTime.utc_now()
+             }}
+        end
     end
   end
 end
