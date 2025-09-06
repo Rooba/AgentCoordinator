@@ -317,13 +317,13 @@ defmodule AgentCoordinator.VSCodeToolProvider do
   Handle a VS Code tool call with permission checking and error handling.
   """
   def handle_tool_call(tool_name, args, context) do
-    Logger.info("VS Code tool call: #{tool_name} with args: #{inspect(args)}")
+    IO.puts(:stderr, "VS Code tool call: #{tool_name} with args: #{inspect(args)}")
 
     # Extract agent_id from args (required for all VS Code tools)
     agent_id = Map.get(args, "agent_id")
 
     if is_nil(agent_id) or agent_id == "" do
-      Logger.warning("Missing agent_id in VS Code tool call: #{tool_name}")
+      IO.puts(:stderr, "Missing agent_id in VS Code tool call: #{tool_name}")
 
       {:error,
        %{
@@ -347,7 +347,7 @@ defmodule AgentCoordinator.VSCodeToolProvider do
           result
 
         {:error, reason} ->
-          Logger.warning("Permission denied for #{tool_name} (agent: #{agent_id}): #{reason}")
+          IO.puts(:stderr, "Permission denied for #{tool_name} (agent: #{agent_id}): #{reason}")
           {:error, %{"error" => "Permission denied", "reason" => reason}}
       end
     end
@@ -363,7 +363,7 @@ defmodule AgentCoordinator.VSCodeToolProvider do
 
       {:error, :not_found} ->
         # Agent not registered, auto-register with VS Code capabilities
-        Logger.info("Auto-registering new agent: #{agent_id}")
+        IO.puts(:stderr, "Auto-registering new agent: #{agent_id}")
 
         capabilities = [
           "coding",
@@ -384,11 +384,11 @@ defmodule AgentCoordinator.VSCodeToolProvider do
                }
              ) do
           {:ok, _result} ->
-            Logger.info("Successfully auto-registered agent: #{agent_id}")
+            IO.puts(:stderr, "Successfully auto-registered agent: #{agent_id}")
             Map.put(context, :agent_id, agent_id)
 
           {:error, reason} ->
-            Logger.error("Failed to auto-register agent #{agent_id}: #{inspect(reason)}")
+            IO.puts(:stderr, "Failed to auto-register agent #{agent_id}: #{inspect(reason)}")
             # Continue anyway
             Map.put(context, :agent_id, agent_id)
         end
@@ -545,12 +545,14 @@ defmodule AgentCoordinator.VSCodeToolProvider do
 
   # Logging function
   defp log_tool_operation(tool_name, args, context, result) do
-    Logger.info("VS Code tool operation completed", %{
+    operation_data = %{
       tool: tool_name,
       agent_id: context[:agent_id],
       args_summary: inspect(Map.take(args, ["path", "command", "message"])),
       success: match?({:ok, _}, result),
       timestamp: DateTime.utc_now()
-    })
+    }
+
+    IO.puts(:stderr, "VS Code tool operation completed: #{inspect(operation_data)}")
   end
 end

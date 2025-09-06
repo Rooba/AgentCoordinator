@@ -1,0 +1,27 @@
+version: '3.8'
+
+# Development override for docker-compose.yml
+# Run with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  agent-coordinator:
+    environment:
+      - MIX_ENV=dev
+    volumes:
+      # Mount source code for development
+      - .:/app/src:ro
+      # Mount config for easy editing
+      - ./mcp_servers.json:/app/mcp_servers.json
+    command: ["bash"]
+    stdin_open: true
+    tty: true
+    profiles:
+      - dev
+
+  # Lightweight development NATS without persistence
+  nats:
+    command: 
+      - '--jetstream'
+    volumes: []
+    profiles:
+      - dev

@@ -139,13 +139,13 @@ defmodule AgentCoordinator.TaskRegistry do
                {Inbox, agent.id}
              ) do
           {:ok, _pid} ->
-            Logger.info("Created inbox for agent #{agent.id}")
+            IO.puts(:stderr, "Created inbox for agent #{agent.id}")
 
           {:error, {:already_started, _pid}} ->
-            Logger.info("Inbox already exists for agent #{agent.id}")
+            IO.puts(:stderr, "Inbox already exists for agent #{agent.id}")
 
           {:error, reason} ->
-            Logger.warning("Failed to create inbox for agent #{agent.id}: #{inspect(reason)}")
+            IO.puts(:stderr, "Failed to create inbox for agent #{agent.id}: #{inspect(reason)}")
         end
 
         # Publish agent registration with codebase info
@@ -752,15 +752,15 @@ defmodule AgentCoordinator.TaskRegistry do
                {Inbox, agent_id}
              ) do
           {:ok, _pid} ->
-            Logger.info("Created inbox for agent #{agent_id}")
+            IO.puts(:stderr, "Created inbox for agent #{agent_id}")
             :ok
 
           {:error, {:already_started, _pid}} ->
-            Logger.info("Inbox already exists for agent #{agent_id}")
+            IO.puts(:stderr, "Inbox already exists for agent #{agent_id}")
             :ok
 
           {:error, reason} ->
-            Logger.warning("Failed to create inbox for agent #{agent_id}: #{inspect(reason)}")
+            IO.puts(:stderr, "Failed to create inbox for agent #{agent_id}: #{inspect(reason)}")
             {:error, reason}
         end
 

@@ -1,0 +1,66 @@
+# Docker build context optimization
+# Exclude files that are not needed for building the Docker image
+
+# Build artifacts
+_build/
+deps/
+.elixir_ls/
+erl_crash.dump
+
+# Development files
+.git/
+.gitignore
+*.md
+!README.md
+docs/
+examples/
+
+# Test files
+test/
+cover/
+.cover/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Docker files (to avoid recursive copying)
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# Environment files that might contain secrets
+.env*
+!.env.example
+
+# NATS data (if running locally)
+nats-data/
+
+# Node.js files (they'll be installed fresh in container)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage reports
+coverage/
+lcov.info
+
+# Dialyzer PLT files
+priv/plts/

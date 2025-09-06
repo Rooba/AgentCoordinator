@@ -124,7 +124,7 @@ defmodule AgentCoordinator.VSCodePermissions do
   def set_agent_permission_level(agent_id, level)
       when level in [:read_only, :editor, :filesystem, :terminal, :git, :admin] do
     # This would persist to a database or configuration store
-    Logger.info("Setting permission level for agent #{agent_id} to #{level}")
+    IO.puts(:stderr, "Setting permission level for agent #{agent_id} to #{level}")
     :ok
   end
 

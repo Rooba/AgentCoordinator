@@ -11,7 +11,7 @@ defmodule AgentCoordinator.MCPServer do
 
   use GenServer
   require Logger
-  alias AgentCoordinator.{TaskRegistry, Inbox, Agent, Task, CodebaseRegistry}
+  alias AgentCoordinator.{TaskRegistry, Inbox, Agent, Task, CodebaseRegistry, VSCodeToolProvider}
 
   # State for tracking external servers and agent sessions
   defstruct [
@@ -345,7 +345,10 @@ defmodule AgentCoordinator.MCPServer do
   end
 
   def get_tools do
-    @mcp_tools
+    case GenServer.call(__MODULE__, :get_all_tools, 5000) do
+      tools when is_list(tools) -> tools
+      _ -> @mcp_tools
+    end
   end
 
   # Server callbacks
@@ -407,11 +410,11 @@ defmodule AgentCoordinator.MCPServer do
 
         if allowed_without_agent do
           # Allow system calls and register_agent to proceed without agent_id
-          response = process_mcp_request(request)
+          response = process_mcp_request(request, state)
           {:reply, response, state}
         else
           # Log the rejected call for debugging
-          Logger.warning("Rejected call without agent_id: method=#{method}, tool=#{tool_name}")
+          IO.puts(:stderr, "Rejected call without agent_id: method=#{method}, tool=#{tool_name}")
           error_response = %{
             "jsonrpc" => "2.0",
             "id" => Map.get(request, "id"),
@@ -425,7 +428,7 @@ defmodule AgentCoordinator.MCPServer do
 
       %{agent_id: nil} ->
         # System call without agent context
-        response = process_mcp_request(request)
+        response = process_mcp_request(request, state)
         {:reply, response, state}
 
       agent_context ->
@@ -436,7 +439,7 @@ defmodule AgentCoordinator.MCPServer do
         end
 
         # Process the request
-        response = process_mcp_request(request)
+        response = process_mcp_request(request, state)
 
         # Send post-operation heartbeat and update session activity
         if agent_context[:agent_id] do
@@ -461,9 +464,14 @@ defmodule AgentCoordinator.MCPServer do
     end
   end
 
+  def handle_call(:get_all_tools, _from, state) do
+    all_tools = get_all_unified_tools_from_state(state)
+    {:reply, all_tools, state}
+  end
+
   # MCP request processing
 
-  defp process_mcp_request(%{"method" => "initialize"} = request) do
+  defp process_mcp_request(%{"method" => "initialize"} = request, _state) do
     id = Map.get(request, "id", nil)
 
     %{
@@ -491,11 +499,11 @@ defmodule AgentCoordinator.MCPServer do
     }
   end
 
-  defp process_mcp_request(%{"method" => "tools/list"} = request) do
+  defp process_mcp_request(%{"method" => "tools/list"} = request, state) do
     id = Map.get(request, "id", nil)
 
     # Get both coordinator tools and external server tools
-    all_tools = get_all_unified_tools()
+    all_tools = get_all_unified_tools_from_state(state)
 
     %{
       "jsonrpc" => "2.0",
@@ -504,11 +512,11 @@ defmodule AgentCoordinator.MCPServer do
     }
   end
 
-  defp process_mcp_request(%{"method" => "notifications/initialized"} = request) do
+  defp process_mcp_request(%{"method" => "notifications/initialized"} = request, _state) do
     # Handle the initialized notification - this is sent by clients after initialization
     id = Map.get(request, "id", nil)
 
-    Logger.info("Client initialization notification received")
+    IO.puts(:stderr, "Client initialization notification received")
 
     # For notifications, we typically don't send a response, but if there's an ID, respond
     if id do
@@ -527,12 +535,13 @@ defmodule AgentCoordinator.MCPServer do
          %{
            "method" => "tools/call",
            "params" => %{"name" => tool_name, "arguments" => args}
-         } = request
+         } = request,
+         state
        ) do
     id = Map.get(request, "id", nil)
 
     # Determine if this is a coordinator tool or external tool
-    result = route_tool_call(tool_name, args)
+    result = route_tool_call(tool_name, args, state)
 
     case result do
       {:ok, data} ->
@@ -551,7 +560,7 @@ defmodule AgentCoordinator.MCPServer do
     end
   end
 
-  defp process_mcp_request(request) do
+  defp process_mcp_request(request, _state) do
     id = Map.get(request, "id", nil)
 
     %{
@@ -586,7 +595,7 @@ defmodule AgentCoordinator.MCPServer do
           {:ok, _pid} -> :ok
           {:error, {:already_started, _pid}} -> :ok
           {:error, reason} ->
-            Logger.warning("Failed to start inbox for agent #{agent.id}: #{inspect(reason)}")
+            IO.puts(:stderr, "Failed to start inbox for agent #{agent.id}: #{inspect(reason)}")
             :ok
         end
 
@@ -1118,7 +1127,7 @@ defmodule AgentCoordinator.MCPServer do
       config: config
     }
 
-    Logger.info("Registering HTTP server: #{name} at #{Map.get(config, :url)}")
+    IO.puts(:stderr, "Registering HTTP server: #{name} at #{Map.get(config, :url)}")
     {:ok, server_info}
   end
 
@@ -1303,10 +1312,54 @@ defmodule AgentCoordinator.MCPServer do
     new_registry =
       Enum.reduce(state.external_servers, %{}, fn {name, server_info}, acc ->
         tools = Map.get(server_info, :tools, [])
-        Map.put(acc, name, tools)
+        # Transform each tool to include agent_id in the schema
+        transformed_tools = Enum.map(tools, &transform_external_tool_schema/1)
+        Map.put(acc, name, transformed_tools)
       end)
 
     %{state | tool_registry: new_registry}
+  end
+
+  defp transform_external_tool_schema(tool) when is_map(tool) do
+    try do
+      # Get the existing input schema
+      input_schema = Map.get(tool, "inputSchema", %{})
+
+      # Get existing properties and required fields
+      properties = Map.get(input_schema, "properties", %{})
+      required = Map.get(input_schema, "required", [])
+
+      # Add agent_id to properties if not already present
+      updated_properties = Map.put_new(properties, "agent_id", %{
+        "type" => "string",
+        "description" => "ID of the agent making the tool call"
+      })
+
+      # Add agent_id to required fields if not already present
+      updated_required = if "agent_id" in required do
+        required
+      else
+        ["agent_id" | required]
+      end
+
+      # Update the input schema
+      updated_schema = Map.merge(input_schema, %{
+        "properties" => updated_properties,
+        "required" => updated_required
+      })
+
+      # Return the tool with updated schema
+      Map.put(tool, "inputSchema", updated_schema)
+    rescue
+      error ->
+        IO.puts(:stderr, "Failed to transform tool schema for #{inspect(tool)}: #{inspect(error)}")
+        tool  # Return original tool if transformation fails
+    end
+  end
+
+  defp transform_external_tool_schema(tool) do
+    IO.puts(:stderr, "Received non-map tool: #{inspect(tool)}")
+    tool  # Return as-is if not a map
   end
 
   defp create_external_pid_file(server_name, os_pid) do
@@ -1348,29 +1401,49 @@ defmodule AgentCoordinator.MCPServer do
     end
   end
 
-  defp get_all_unified_tools do
-    # Combine coordinator tools with external server tools
+  defp get_all_unified_tools_from_state(state) do
+    # Combine coordinator tools with external server tools from state
     coordinator_tools = @mcp_tools
 
-    # Get external tools from the current process state
-    external_tools =
-      case Process.get(:external_tool_registry) do
-        nil -> []
-        registry -> Map.values(registry) |> List.flatten()
+    # Get external tools from GenServer state
+    external_tools = Map.values(state.tool_registry) |> List.flatten()
+
+    # Get VS Code tools only if VS Code functionality is available
+    vscode_tools =
+      try do
+        if Code.ensure_loaded?(VSCodeToolProvider) do
+          VSCodeToolProvider.get_tools()
+        else
+          IO.puts(:stderr, "VS Code tools not available - module not loaded")
+          []
+        end
+      rescue
+        error ->
+          IO.puts(:stderr, "VS Code tools not available - error loading: #{inspect(error)}")
+          []
       end
 
-    coordinator_tools ++ external_tools
+    coordinator_tools ++ external_tools ++ vscode_tools
   end
 
-  defp route_tool_call(tool_name, args) do
+  defp route_tool_call(tool_name, args, state) do
     # Check if it's a coordinator tool first
     coordinator_tool_names = Enum.map(@mcp_tools, & &1["name"])
 
-    if tool_name in coordinator_tool_names do
-      handle_coordinator_tool(tool_name, args)
-    else
-      # Try to route to external server
-      route_to_external_server(tool_name, args)
+    cond do
+      tool_name in coordinator_tool_names ->
+        handle_coordinator_tool(tool_name, args)
+
+      # Check if it's a VS Code tool
+      String.starts_with?(tool_name, "vscode_") ->
+        # Route to VS Code Tool Provider with agent context
+        agent_id = Map.get(args, "agent_id")
+        context = if agent_id, do: %{agent_id: agent_id}, else: %{}
+        VSCodeToolProvider.handle_tool_call(tool_name, args, context)
+
+      true ->
+        # Try to route to external server
+        route_to_external_server(tool_name, args, state)
     end
   end
 
@@ -1396,10 +1469,73 @@ defmodule AgentCoordinator.MCPServer do
     end
   end
 
-  defp route_to_external_server(tool_name, _args) do
-    # For now, return error for external tools
-    # This will be enhanced when we fully implement external routing
-    {:error, "External tool routing not yet implemented: #{tool_name}"}
+  defp route_to_external_server(tool_name, args, state) do
+    # Find which external server has this tool
+    server_with_tool = find_server_for_tool(tool_name, state)
+
+    case server_with_tool do
+      nil ->
+        {:error, "Tool not found in any external server: #{tool_name}"}
+
+      {server_name, server_info} ->
+        # Strip agent_id from args before sending to external server
+        # External servers don't expect this parameter
+        external_args = Map.delete(args, "agent_id")
+
+        # Send tool call to the external server
+        tool_call_request = %{
+          "jsonrpc" => "2.0",
+          "id" => System.unique_integer(),
+          "method" => "tools/call",
+          "params" => %{
+            "name" => tool_name,
+            "arguments" => external_args
+          }
+        }
+
+        case send_external_server_request(server_info, tool_call_request) do
+          {:ok, %{"result" => result}} ->
+            # Extract the actual content from the MCP response
+            case result do
+              %{"content" => content} when is_list(content) ->
+                # Return the first text content for simplicity
+                text_content = Enum.find(content, fn item ->
+                  Map.get(item, "type") == "text"
+                end)
+
+                if text_content do
+                  case Jason.decode(Map.get(text_content, "text", "{}")) do
+                    {:ok, decoded} -> {:ok, decoded}
+                    {:error, _} -> {:ok, Map.get(text_content, "text")}
+                  end
+                else
+                  {:ok, result}
+                end
+
+              _ ->
+                {:ok, result}
+            end
+
+          {:ok, %{"error" => error}} ->
+            {:error, "External server error: #{inspect(error)}"}
+
+          {:error, reason} ->
+            {:error, "Failed to call external server #{server_name}: #{reason}"}
+        end
+    end
+  end
+
+  defp find_server_for_tool(tool_name, state) do
+    # Search through all external servers for the tool
+    Enum.find_value(state.external_servers, fn {server_name, server_info} ->
+      tools = Map.get(server_info, :tools, [])
+
+      if Enum.any?(tools, fn tool -> Map.get(tool, "name") == tool_name end) do
+        {server_name, server_info}
+      else
+        nil
+      end
+    end)
   end
 
   # Session management functions
