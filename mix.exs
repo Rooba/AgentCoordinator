@@ -48,6 +48,12 @@ defmodule AgentCoordinator.MixProject do
       {:gen_stage, "~> 1.2"},
       {:uuid, "~> 1.1"},
 
+      # HTTP server dependencies
+      {:plug, "~> 1.15"},
+      {:plug_cowboy, "~> 2.7"},
+      {:websock_adapter, "~> 0.5"},
+      {:cors_plug, "~> 3.0"},
+
       # Development and testing dependencies
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},

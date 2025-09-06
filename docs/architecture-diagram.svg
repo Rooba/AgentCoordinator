@@ -1,0 +1,305 @@
+<svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .agent-box {
+        fill: #e3f2fd;
+        stroke: #1976d2;
+        stroke-width: 2;
+      }
+      .coordinator-box {
+        fill: #f3e5f5;
+        stroke: #7b1fa2;
+        stroke-width: 3;
+      }
+      .component-box {
+        fill: #fff3e0;
+        stroke: #f57c00;
+        stroke-width: 2;
+      }
+      .mcp-server-box {
+        fill: #e8f5e8;
+        stroke: #388e3c;
+        stroke-width: 2;
+      }
+      .taskboard-box {
+        fill: #fff8e1;
+        stroke: #ffa000;
+        stroke-width: 2;
+      }
+      .text {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 12px;
+      }
+      .title-text {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 14px;
+        font-weight: bold;
+      }
+      .small-text {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 10px;
+      }
+      .connection-line {
+        stroke: #666;
+        stroke-width: 2;
+        fill: none;
+      }
+      .mcp-line {
+        stroke: #1976d2;
+        stroke-width: 3;
+        fill: none;
+      }
+      .data-flow {
+        stroke: #4caf50;
+        stroke-width: 2;
+        fill: none;
+        stroke-dasharray: 5,5;
+      }
+      .text-bg {
+        fill: white;
+        fill-opacity: 0.9;
+        stroke: #333;
+        stroke-width: 1; rx: 4;
+      }
+      .overlay-text {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 12px;
+        font-weight: bold;
+      }
+    </style>
+
+    <!-- Arrow marker -->
+    <marker id="arrowhead" markerWidth="6" markerHeight="4"
+            refX="5" refY="2" orient="auto">
+      <polygon points="0 0, 6 2, 0 4" fill="none" stroke="#666" stroke-width="0.01" />
+    </marker>
+
+    <!-- MCP Arrow marker -->
+    <marker id="mcpArrow" markerWidth="6" markerHeight="4"
+            refX="5" refY="2" orient="auto">
+      <polygon points="0 0, 6 2, 0 4" fill="#1976d2" stroke="#1976d2" stroke-width="0.01" />
+    </marker>
+
+    <!-- Data flow arrow -->
+    <marker id="dataArrow" markerWidth="6" markerHeight="4"
+            refX="5" refY="2" orient="auto">
+      <polygon points="0 0, 6 2, 0 4" fill="#4caf50" stroke="#4caf50" stroke-width="1" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="800" fill="#fafafa03" />
+
+  <!-- Title -->
+  <text x="600" y="30" text-anchor="middle" class="title-text" font-size="18" fill="#333">
+    Agent Coordinator: MCP Proxy Server Architecture
+  </text>
+
+  <!-- AI Agents Section -->
+  <text x="600" y="55" text-anchor="middle" class="text" fill="#666">
+    Single MCP Interface → Multiple AI Agents → Unified Project Awareness
+  </text>
+
+  <!-- Agent 1 -->
+  <rect x="50" y="80" width="150" height="80" rx="8" class="agent-box" />
+  <text x="125" y="105" text-anchor="middle" class="title-text" fill="#1976d2">Agent 1</text>
+  <text x="125" y="120" text-anchor="middle" class="small-text" fill="#666">Purple Zebra</text>
+  <text x="125" y="135" text-anchor="middle" class="small-text" fill="#666">Capabilities:</text>
+  <text x="125" y="148" text-anchor="middle" class="small-text" fill="#666">coding, testing</text>
+
+  <!-- Agent 2 -->
+  <rect x="250" y="80" width="150" height="80" rx="8" class="agent-box" />
+  <text x="325" y="105" text-anchor="middle" class="title-text" fill="#1976d2">Agent 2</text>
+  <text x="325" y="120" text-anchor="middle" class="small-text" fill="#666">Yellow Elephant</text>
+  <text x="325" y="135" text-anchor="middle" class="small-text" fill="#666">Capabilities:</text>
+  <text x="325" y="148" text-anchor="middle" class="small-text" fill="#666">analysis, docs</text>
+
+  <!-- Agent N -->
+  <rect x="450" y="80" width="150" height="80" rx="8" class="agent-box" />
+  <text x="525" y="105" text-anchor="middle" class="title-text" fill="#1976d2">Agent N</text>
+  <text x="525" y="120" text-anchor="middle" class="small-text" fill="#666">More Agents...</text>
+  <text x="525" y="135" text-anchor="middle" class="small-text" fill="#666">Dynamic</text>
+  <text x="525" y="148" text-anchor="middle" class="small-text" fill="#666">Registration</text>
+
+  <!-- Lines from agents to coordinator (drawn first, behind text) -->
+  <line x1="125" y1="160" x2="130" y2="220" class="mcp-line" marker-end="url(#mcpArrow)" />
+  <line x1="325" y1="160" x2="330" y2="220" class="mcp-line" marker-end="url(#mcpArrow)" />
+  <line x1="525" y1="160" x2="525" y2="220" class="mcp-line" marker-end="url(#mcpArrow)" />
+
+  <!-- MCP Protocol text with background (drawn on top of lines) -->
+  <rect x="200" y="167" width="250" height="25" class="text-bg" />
+  <text x="325" y="185" text-anchor="middle" class="overlay-text">
+    MCP Protocol → Single Proxy Interface
+  </text>
+
+  <!-- Main Coordinator Box -->
+  <rect x="50" y="220" width="600" height="280" rx="12" class="coordinator-box" />
+  <text x="350" y="245" text-anchor="middle" class="title-text" font-size="16">
+    AGENT COORDINATOR (MCP Proxy Server)
+  </text>
+  <text x="350" y="255" text-anchor="middle" class="small-text" fill="#9c27b0">
+    ⚡ All tool calls proxy through here → Real-time agent tracking → Full project awareness
+  </text>
+
+  <!-- Core Components Row -->
+  <!-- Task Registry -->
+  <rect x="70" y="260" width="160" height="100" rx="6" class="component-box" />
+  <text x="150" y="280" text-anchor="middle" class="title-text" fill="#f57c00">Task Registry</text>
+  <text x="150" y="298" text-anchor="middle" class="small-text" fill="#666">• Task Queuing</text>
+  <text x="150" y="311" text-anchor="middle" class="small-text" fill="#666">• Agent Matching</text>
+  <text x="150" y="324" text-anchor="middle" class="small-text" fill="#666">• Auto-Tracking</text>
+  <text x="150" y="337" text-anchor="middle" class="small-text" fill="#666">• Progress Monitor</text>
+  <text x="150" y="350" text-anchor="middle" class="small-text" fill="#666">• Conflict Prevention</text>
+
+  <!-- Agent Manager -->
+  <rect x="250" y="260" width="160" height="100" rx="6" class="component-box" />
+  <text x="330" y="280" text-anchor="middle" class="title-text" fill="#f57c00">Agent Manager</text>
+  <text x="330" y="298" text-anchor="middle" class="small-text" fill="#666">• Registration</text>
+  <text x="330" y="311" text-anchor="middle" class="small-text" fill="#666">• Heartbeat Monitor</text>
+  <text x="330" y="324" text-anchor="middle" class="small-text" fill="#666">• Capabilities</text>
+  <text x="330" y="337" text-anchor="middle" class="small-text" fill="#666">• Status Tracking</text>
+  <text x="330" y="350" text-anchor="middle" class="small-text" fill="#666">• Load Balancing</text>
+
+  <!-- Codebase Registry -->
+  <rect x="430" y="260" width="160" height="100" rx="6" class="component-box" />
+  <text x="510" y="280" text-anchor="middle" class="title-text" fill="#f57c00">Codebase Registry</text>
+  <text x="510" y="298" text-anchor="middle" class="small-text" fill="#666">• Cross-Repo</text>
+  <text x="510" y="311" text-anchor="middle" class="small-text" fill="#666">• Dependencies</text>
+  <text x="510" y="324" text-anchor="middle" class="small-text" fill="#666">• Workspace Mgmt</text>
+  <text x="510" y="337" text-anchor="middle" class="small-text" fill="#666">• File Locking</text>
+  <text x="510" y="350" text-anchor="middle" class="small-text" fill="#666">• Version Control</text>
+
+  <!-- Unified Tool Registry -->
+  <rect x="70" y="380" width="520" height="100" rx="6" class="component-box" />
+  <text x="330" y="400" text-anchor="middle" class="title-text" fill="#f57c00">UNIFIED TOOL REGISTRY (Proxy Layer)</text>
+  <text x="330" y="415" text-anchor="middle" class="small-text" fill="#f57c00">Every tool call = Agent presence update + Task tracking + Project awareness</text>
+
+  <!-- Native Tools -->
+  <text x="90" y="435" class="small-text" fill="#666" font-weight="bold">Native Tools:</text>
+  <!-- <text x="90" y="434" class="small-text" fill="#666">register_agent, get_next_task, create_task_set,</text> -->
+  <!-- <text x="90" y="448" class="small-text" fill="#666">complete_task, heartbeat, get_task_board</text> -->
+  <text x="90" y="463" class="small-text" fill="#666" font-weight="bold">Proxied External Tools:</text>
+
+  <!-- External Tools -->
+  <text x="320" y="435" class="small-text" fill="#666">register_agent, get_next_task, create_task_set,</text>
+  <!-- <text x="320" y="420" class="small-text" fill="#666" font-weight="bold">External MCP Tools:</text> -->
+  <text x="320" y="449" class="small-text" fill="#666">complete_task, heartbeat, get_task_board</text>
+  <!-- <text x="320" y="434" class="small-text" fill="#666">read_file, write_file, search_memory,</text> -->
+  <text x="320" y="463" class="small-text" fill="#666">read_file, write_file, search_memory, get_docs</text>
+
+  <!-- VS Code Tools -->
+  <text x="90" y="477" class="small-text" fill="#666" font-weight="bold">VS Code Integration:</text>
+  <text x="320" y="477" class="small-text" fill="#666">get_active_editor, set_selection, install_extension</text>
+
+  <!-- Task Board (Right side) -->
+  <rect x="680" y="220" width="260" height="280" rx="8" class="coordinator-box"/>
+  <text x="810" y="245" text-anchor="middle" class="title-text">Real-Time Task Board</text>
+
+  <!-- Agent Queues -->
+  <rect x="700" y="260" width="100" height="80" rx="4"  class="component-box"/>
+  <text x="750" y="275" text-anchor="middle" class="small-text" fill="#666" font-weight="bold">Agent 1 Queue</text>
+  <text x="750" y="290" text-anchor="middle" class="small-text" fill="#4caf50">✓ Task 1</text>
+  <text x="750" y="303" text-anchor="middle" class="small-text" fill="#4caf50">✓ Task 2</text>
+  <text x="750" y="316" text-anchor="middle" class="small-text" fill="#ff9800">→ Task 3</text>
+  <text x="750" y="329" text-anchor="middle" class="small-text" fill="#666">… Task 4</text>
+
+  <rect x="820" y="260" width="100" height="80" rx="4"  class="component-box" />
+  <text x="870" y="275" text-anchor="middle" class="small-text" fill="#666" font-weight="bold">Agent 2 Queue</text>
+  <text x="870" y="290" text-anchor="middle" class="small-text" fill="#4caf50">✓ Task 1</text>
+  <text x="870" y="303" text-anchor="middle" class="small-text" fill="#ff9800">→ Task 2</text>
+  <text x="870" y="316" text-anchor="middle" class="small-text" fill="#666">… Task 3</text>
+  <text x="870" y="329" text-anchor="middle" class="small-text" fill="#666">… Task 4</text>
+
+
+
+  <!-- Agent Inboxes -->
+  <rect x="700" y="360" width="100" height="60" rx="4" fill="#e3f2fd" stroke="#1976d2" stroke-width="1" />
+  <text x="750" y="375" text-anchor="middle" class="small-text" fill="#1976d2" font-weight="bold">Agent 1 Inbox</text>
+  <text x="750" y="390" text-anchor="middle" class="small-text" fill="#666">current: task 3</text>
+  <text x="750" y="403" text-anchor="middle" class="small-text" fill="#666">[complete task]</text>
+  <!-- <rect x="700" y="360" width="100" height="60" rx="4" fill="#e3f2fd" stroke="#1976d2" stroke-width="1" />
+  <text x="750" y="375" text-anchor="middle" class="small-text" fill="#1976d2" font-weight="bold">Agent 1 Inbox</text>
+  <text x="750" y="390" text-anchor="middle" class="small-text" fill="#666">current: task 3</text>
+  <text x="750" y="403" text-anchor="middle" class="small-text" fill="#666">[complete task]</text> -->
+
+  <rect x="820" y="360" width="100" height="60" rx="4" fill="#e3f2fd" stroke="#1976d2" stroke-width="1" />
+  <text x="870" y="375" text-anchor="middle" class="small-text" fill="#1976d2" font-weight="bold">Agent 2 Inbox</text>
+  <text x="870" y="390" text-anchor="middle" class="small-text" fill="#666">current: task 2</text>
+  <text x="870" y="403" text-anchor="middle" class="small-text" fill="#666">[complete task]</text>
+
+  <!-- Connection lines from coordinator to external servers (drawn first, behind text) -->
+  <line x1="350" y1="500" x2="110" y2="550" class="connection-line" marker-end="url(#arrowhead)" />
+  <line x1="350" y1="500" x2="250" y2="550" class="connection-line" marker-end="url(#arrowhead)" />
+  <line x1="350" y1="500" x2="390" y2="550" class="connection-line" marker-end="url(#arrowhead)" />
+  <line x1="350" y1="500" x2="530" y2="550" class="connection-line" marker-end="url(#arrowhead)" />
+
+  <!-- Data flow line to task board (drawn first, behind text) -->
+  <line x1="650" y1="350" x2="680" y2="350" class="data-flow" marker-end="url(#dataArrow)" />
+
+  <!-- PROXY arrows showing reverse direction - tools flow UP through coordinator -->
+  <line x1="110" y1="550" x2="330" y2="500" class="mcp-line" marker-end="url(#mcpArrow)" stroke-dasharray="3,3" />
+  <line x1="250" y1="550" x2="340" y2="500" class="mcp-line" marker-end="url(#mcpArrow)" stroke-dasharray="3,3" />
+  <line x1="390" y1="550" x2="360" y2="500" class="mcp-line" marker-end="url(#mcpArrow)" stroke-dasharray="3,3" />
+  <line x1="530" y1="550" x2="370" y2="500" class="mcp-line" marker-end="url(#mcpArrow)" stroke-dasharray="3,3" />
+
+  <!-- External MCP Servers Section title with background -->
+  <rect x="210" y="520" width="280" height="25" class="text-bg" />
+  <text x="350" y="535" text-anchor="middle" class="overlay-text" fill="#388e3c">
+    External MCP Servers (Proxied via Coordinator)
+  </text>
+
+  <!-- Proxy flow label -->
+  <rect x="550" y="520" width="140" height="25" class="text-bg" />
+  <text x="620" y="535" text-anchor="middle" class="small-text" fill="#1976d2" font-weight="bold">
+    ⇅ Proxied Tool Calls
+  </text>
+
+  <!-- Data flow label with background -->
+  <rect x="630" y="340" width="80" height="20" class="text-bg" />
+  <text x="670" y="352" text-anchor="middle" class="small-text" fill="#4caf50" font-weight="bold">
+    Live Updates
+  </text>
+
+  <!-- MCP Server boxes -->
+  <rect x="50" y="550" width="120" height="80" rx="6" class="mcp-server-box" />
+  <text x="110" y="570" text-anchor="middle" class="title-text" fill="#388e3c">Filesystem</text>
+  <text x="110" y="585" text-anchor="middle" class="small-text" fill="#666">read_file</text>
+  <text x="110" y="598" text-anchor="middle" class="small-text" fill="#666">write_file</text>
+  <text x="110" y="611" text-anchor="middle" class="small-text" fill="#666">list_directory</text>
+
+  <rect x="190" y="550" width="120" height="80" rx="6" class="mcp-server-box" />
+  <text x="250" y="570" text-anchor="middle" class="title-text" fill="#388e3c">Memory</text>
+  <text x="250" y="585" text-anchor="middle" class="small-text" fill="#666">search_nodes</text>
+  <text x="250" y="598" text-anchor="middle" class="small-text" fill="#666">store_memory</text>
+  <text x="250" y="611" text-anchor="middle" class="small-text" fill="#666">recall_info</text>
+
+  <rect x="330" y="550" width="120" height="80" rx="6" class="mcp-server-box" />
+  <text x="390" y="570" text-anchor="middle" class="title-text" fill="#388e3c">Context7</text>
+  <text x="390" y="585" text-anchor="middle" class="small-text" fill="#666">get_docs</text>
+  <text x="390" y="598" text-anchor="middle" class="small-text" fill="#666">search_docs</text>
+  <text x="390" y="611" text-anchor="middle" class="small-text" fill="#666">get_library</text>
+
+  <rect x="470" y="550" width="120" height="80" rx="6" class="mcp-server-box" />
+  <text x="530" y="570" text-anchor="middle" class="title-text" fill="#388e3c">Sequential</text>
+  <text x="530" y="585" text-anchor="middle" class="small-text" fill="#666">thinking</text>
+  <text x="530" y="598" text-anchor="middle" class="small-text" fill="#666">analyze</text>
+  <text x="530" y="611" text-anchor="middle" class="small-text" fill="#666">problem</text>
+
+  <!-- Key Process Flow -->
+  <text x="350" y="670" text-anchor="middle" class="title-text" fill="#d5d5d5ff">
+    Key Proxy Flow: Agent → Coordinator → External Tools → Presence Tracking
+  </text>
+
+  <text x="50" y="690" class="small-text" fill="#d5d5d5ff">1. Agents connect via single MCP interface</text>
+  <text x="50" y="705" class="small-text" fill="#d5d5d5ff">2. ALL tool calls proxy through coordinator</text>
+  <text x="50" y="720" class="small-text" fill="#d5d5d5ff">3. Coordinator updates agent presence + tracks tasks</text>
+
+  <text x="450" y="690" class="small-text" fill="#d5d5d5ff">4. Agents gain full project awareness via proxy</text>
+  <text x="450" y="705" class="small-text" fill="#d5d5d5ff">5. Real-time coordination prevents conflicts</text>
+  <text x="450" y="720" class="small-text" fill="#d5d5d5ff">6. Single interface → Multiple backends</text>
+
+  <!-- Version info -->
+  <text x="1150" y="790" text-anchor="end" class="small-text" fill="#aaa">
+    Agent Coordinator v0.1.0
+  </text>
+</svg>

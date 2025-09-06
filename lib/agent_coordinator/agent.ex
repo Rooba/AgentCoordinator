@@ -13,7 +13,10 @@ defmodule AgentCoordinator.Agent do
              :codebase_id,
              :workspace_path,
              :last_heartbeat,
-             :metadata
+             :metadata,
+             :current_activity,
+             :current_files,
+             :activity_history
            ]}
   defstruct [
     :id,
@@ -24,7 +27,10 @@ defmodule AgentCoordinator.Agent do
     :codebase_id,
     :workspace_path,
     :last_heartbeat,
-    :metadata
+    :metadata,
+    :current_activity,
+    :current_files,
+    :activity_history
   ]
 
   @type status :: :idle | :busy | :offline | :error
@@ -39,25 +45,77 @@ defmodule AgentCoordinator.Agent do
           codebase_id: String.t(),
           workspace_path: String.t() | nil,
           last_heartbeat: DateTime.t(),
-          metadata: map()
+          metadata: map(),
+          current_activity: String.t() | nil,
+          current_files: [String.t()],
+          activity_history: [map()]
         }
 
   def new(name, capabilities, opts \\ []) do
+    workspace_path = Keyword.get(opts, :workspace_path)
+    
+    # Use smart codebase identification
+    codebase_id = case Keyword.get(opts, :codebase_id) do
+      nil when workspace_path ->
+        # Auto-detect from workspace
+        case AgentCoordinator.CodebaseIdentifier.identify_codebase(workspace_path) do
+          %{canonical_id: canonical_id} -> canonical_id
+          _ -> Path.basename(workspace_path || "default")
+        end
+      
+      nil ->
+        "default"
+      
+      explicit_id ->
+        # Normalize the provided ID  
+        AgentCoordinator.CodebaseIdentifier.normalize_codebase_reference(explicit_id, workspace_path)
+    end
+    
     %__MODULE__{
       id: UUID.uuid4(),
       name: name,
       capabilities: capabilities,
       status: :idle,
       current_task_id: nil,
-      codebase_id: Keyword.get(opts, :codebase_id, "default"),
-      workspace_path: Keyword.get(opts, :workspace_path),
+      codebase_id: codebase_id,
+      workspace_path: workspace_path,
       last_heartbeat: DateTime.utc_now(),
-      metadata: Keyword.get(opts, :metadata, %{})
+      metadata: Keyword.get(opts, :metadata, %{}),
+      current_activity: nil,
+      current_files: [],
+      activity_history: []
     }
   end
 
   def heartbeat(agent) do
     %{agent | last_heartbeat: DateTime.utc_now()}
+  end
+
+  def update_activity(agent, activity, files \\ []) do
+    # Add to activity history (keep last 10 activities)
+    activity_entry = %{
+      activity: activity,
+      files: files,
+      timestamp: DateTime.utc_now()
+    }
+    
+    new_history = [activity_entry | agent.activity_history]
+                  |> Enum.take(10)
+    
+    %{agent | 
+      current_activity: activity,
+      current_files: files,
+      activity_history: new_history,
+      last_heartbeat: DateTime.utc_now()
+    }
+  end
+
+  def clear_activity(agent) do
+    %{agent | 
+      current_activity: nil,
+      current_files: [],
+      last_heartbeat: DateTime.utc_now()
+    }
   end
 
   def assign_task(agent, task_id) do

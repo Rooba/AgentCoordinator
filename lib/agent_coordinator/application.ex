@@ -24,8 +24,14 @@ defmodule AgentCoordinator.Application do
       # Task registry with NATS integration (conditionally add persistence)
       {AgentCoordinator.TaskRegistry, nats: if(enable_persistence, do: nats_config(), else: nil)},
 
+      # Session manager for MCP session token handling
+      AgentCoordinator.SessionManager,
+
       # Unified MCP server (includes external server management, session tracking, and auto-registration)
       AgentCoordinator.MCPServer,
+
+      # Interface manager for multiple MCP interface modes
+      AgentCoordinator.InterfaceManager,
 
       # Auto-heartbeat manager
       AgentCoordinator.AutoHeartbeat,

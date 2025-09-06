@@ -11,7 +11,7 @@ defmodule AgentCoordinator.MCPServer do
 
   use GenServer
   require Logger
-  alias AgentCoordinator.{TaskRegistry, Inbox, Agent, Task, CodebaseRegistry, VSCodeToolProvider}
+  alias AgentCoordinator.{TaskRegistry, Inbox, Agent, Task, CodebaseRegistry, VSCodeToolProvider, ToolFilter, SessionManager, ActivityTracker}
 
   # State for tracking external servers and agent sessions
   defstruct [
@@ -38,7 +38,7 @@ defmodule AgentCoordinator.MCPServer do
               "enum" => ["coding", "testing", "documentation", "analysis", "review"]
             }
           },
-          "codebase_id" => %{"type" => "string"},
+          "codebase_id" => %{"type" => "string", "description" => "If the project is found locally on the machine, use the name of the directory in which you are currently at (.). If it is remote, use the git registered codebase ID, if it is a multicodebase project, and there is no apparently folder to base as the rootmost -- ask."},
           "workspace_path" => %{"type" => "string"},
           "cross_codebase_capable" => %{"type" => "boolean"}
         },
@@ -71,7 +71,7 @@ defmodule AgentCoordinator.MCPServer do
           "title" => %{"type" => "string"},
           "description" => %{"type" => "string"},
           "priority" => %{"type" => "string", "enum" => ["low", "normal", "high", "urgent"]},
-          "codebase_id" => %{"type" => "string"},
+          "codebase_id" => %{"type" => "string", "description" => "If the project is found locally on the machine, use the name of the directory in which you are currently at (.). If it is remote, use the git registered codebase ID, if it is a multicodebase project, and there is no apparently folder to base as the rootmost -- ask."},
           "file_paths" => %{"type" => "array", "items" => %{"type" => "string"}},
           "required_capabilities" => %{
             "type" => "array",
@@ -331,6 +331,25 @@ defmodule AgentCoordinator.MCPServer do
         },
         "required" => ["agent_id"]
       }
+    },
+    %{
+      "name" => "discover_codebase_info",
+      "description" => "Intelligently discover codebase information from workspace path, including git repository details, canonical ID generation, and project identification.",
+      "inputSchema" => %{
+        "type" => "object",
+        "properties" => %{
+          "agent_id" => %{"type" => "string"},
+          "workspace_path" => %{
+            "type" => "string",
+            "description" => "Path to the workspace/project directory"
+          },
+          "custom_id" => %{
+            "type" => "string",
+            "description" => "Optional: Override automatic codebase ID detection"
+          }
+        },
+        "required" => ["agent_id", "workspace_path"]
+      }
     }
   ]
 
@@ -344,8 +363,8 @@ defmodule AgentCoordinator.MCPServer do
     GenServer.call(__MODULE__, {:mcp_request, request})
   end
 
-  def get_tools do
-    case GenServer.call(__MODULE__, :get_all_tools, 5000) do
+  def get_tools(client_context \\ nil) do
+    case GenServer.call(__MODULE__, {:get_all_tools, client_context}, 5000) do
       tools when is_list(tools) -> tools
       _ -> @mcp_tools
     end
@@ -464,7 +483,20 @@ defmodule AgentCoordinator.MCPServer do
     end
   end
 
+  def handle_call({:get_all_tools, client_context}, _from, state) do
+    all_tools = get_all_unified_tools_from_state(state)
+
+    # Apply tool filtering if client context is provided
+    filtered_tools = case client_context do
+      nil -> all_tools  # No filtering for nil context (backward compatibility)
+      context -> ToolFilter.filter_tools(all_tools, context)
+    end
+
+    {:reply, filtered_tools, state}
+  end
+
   def handle_call(:get_all_tools, _from, state) do
+    # Backward compatibility - no filtering
     all_tools = get_all_unified_tools_from_state(state)
     {:reply, all_tools, state}
   end
@@ -599,10 +631,33 @@ defmodule AgentCoordinator.MCPServer do
             :ok
         end
 
-        # Track the session if we have caller info
-        track_agent_session(agent.id, name, capabilities)
+        # Generate session token for the agent
+        session_metadata = %{
+          name: name,
+          capabilities: capabilities,
+          codebase_id: agent.codebase_id,
+          workspace_path: opts[:workspace_path],
+          registered_at: DateTime.utc_now()
+        }
 
-        {:ok, %{agent_id: agent.id, codebase_id: agent.codebase_id, status: "registered"}}
+        case SessionManager.create_session(agent.id, session_metadata) do
+          {:ok, session_token} ->
+            # Track the session if we have caller info
+            track_agent_session(agent.id, name, capabilities)
+
+            {:ok, %{
+              agent_id: agent.id,
+              codebase_id: agent.codebase_id,
+              status: "registered",
+              session_token: session_token,
+              expires_at: DateTime.add(DateTime.utc_now(), 60, :minute) |> DateTime.to_iso8601()
+            }}
+
+          {:error, reason} ->
+            Logger.error("Failed to create session for agent #{agent.id}: #{inspect(reason)}")
+            # Still return success but without session token for backward compatibility
+            {:ok, %{agent_id: agent.id, codebase_id: agent.codebase_id, status: "registered"}}
+        end
 
       {:error, reason} ->
         {:error, "Failed to register agent: #{reason}"}
@@ -775,6 +830,8 @@ defmodule AgentCoordinator.MCPServer do
           workspace_path: agent.workspace_path,
           online: Agent.is_online?(agent),
           cross_codebase_capable: Agent.can_work_cross_codebase?(agent),
+          current_activity: agent.current_activity,
+          current_files: agent.current_files || [],
           current_task:
             status.current_task &&
               %{
@@ -1008,6 +1065,9 @@ defmodule AgentCoordinator.MCPServer do
           online: Agent.is_online?(agent),
           cross_codebase_capable: Agent.can_work_cross_codebase?(agent),
           last_heartbeat: agent.last_heartbeat,
+          current_activity: agent.current_activity,
+          current_files: agent.current_files || [],
+          activity_history: agent.activity_history || [],
           tasks: task_info
         }
       end)
@@ -1072,6 +1132,77 @@ defmodule AgentCoordinator.MCPServer do
              }}
         end
     end
+  end
+
+  # NEW: Codebase discovery function
+
+  defp discover_codebase_info(%{"agent_id" => agent_id, "workspace_path" => workspace_path} = args) do
+    custom_id = Map.get(args, "custom_id")
+
+    # Use the CodebaseIdentifier to analyze the workspace
+    opts = if custom_id, do: [custom_id: custom_id], else: []
+
+    case AgentCoordinator.CodebaseIdentifier.identify_codebase(workspace_path, opts) do
+      codebase_info ->
+        # Also check if this codebase is already registered
+        existing_codebase = case CodebaseRegistry.get_codebase(codebase_info.canonical_id) do
+          {:ok, codebase} -> codebase
+          {:error, :not_found} -> nil
+        end
+
+        # Check for other agents working on same codebase
+        agents = TaskRegistry.list_agents()
+        related_agents = Enum.filter(agents, fn agent ->
+          agent.codebase_id == codebase_info.canonical_id and agent.id != agent_id
+        end)
+
+        response = %{
+          codebase_info: codebase_info,
+          already_registered: existing_codebase != nil,
+          existing_codebase: existing_codebase,
+          related_agents: Enum.map(related_agents, fn agent ->
+            %{
+              agent_id: agent.id,
+              name: agent.name,
+              capabilities: agent.capabilities,
+              status: agent.status,
+              workspace_path: agent.workspace_path,
+              online: Agent.is_online?(agent)
+            }
+          end),
+          recommendations: generate_codebase_recommendations(codebase_info, existing_codebase, related_agents)
+        }
+
+        {:ok, response}
+    end
+  end
+
+  defp generate_codebase_recommendations(codebase_info, existing_codebase, related_agents) do
+    recommendations = []
+
+    # Recommend registration if not already registered
+    recommendations = if existing_codebase == nil do
+      ["Consider registering this codebase with register_codebase for better coordination" | recommendations]
+    else
+      recommendations
+    end
+
+    # Recommend coordination if other agents are working on same codebase
+    recommendations = if length(related_agents) > 0 do
+      agent_names = Enum.map(related_agents, & &1.name) |> Enum.join(", ")
+      ["Other agents working on this codebase: #{agent_names}. Consider coordination." | recommendations]
+    else
+      recommendations
+    end
+
+    # Recommend git setup if local folder without git
+    recommendations = if codebase_info.identification_method == :folder_name do
+      ["Consider initializing git repository for better distributed coordination" | recommendations]
+    else
+      recommendations
+    end
+
+    Enum.reverse(recommendations)
   end
 
   # External MCP server management functions
@@ -1427,17 +1558,24 @@ defmodule AgentCoordinator.MCPServer do
   end
 
   defp route_tool_call(tool_name, args, state) do
+    # Extract agent_id for activity tracking
+    agent_id = Map.get(args, "agent_id")
+    
+    # Update agent activity before processing the tool call
+    if agent_id do
+      ActivityTracker.update_agent_activity(agent_id, tool_name, args)
+    end
+    
     # Check if it's a coordinator tool first
     coordinator_tool_names = Enum.map(@mcp_tools, & &1["name"])
 
-    cond do
+    result = cond do
       tool_name in coordinator_tool_names ->
         handle_coordinator_tool(tool_name, args)
 
       # Check if it's a VS Code tool
       String.starts_with?(tool_name, "vscode_") ->
         # Route to VS Code Tool Provider with agent context
-        agent_id = Map.get(args, "agent_id")
         context = if agent_id, do: %{agent_id: agent_id}, else: %{}
         VSCodeToolProvider.handle_tool_call(tool_name, args, context)
 
@@ -1445,6 +1583,13 @@ defmodule AgentCoordinator.MCPServer do
         # Try to route to external server
         route_to_external_server(tool_name, args, state)
     end
+    
+    # Clear agent activity after tool call completes (optional - could keep until next call)
+    # if agent_id do
+    #   ActivityTracker.clear_agent_activity(agent_id)
+    # end
+    
+    result
   end
 
   defp handle_coordinator_tool(tool_name, args) do
@@ -1465,6 +1610,7 @@ defmodule AgentCoordinator.MCPServer do
       "create_agent_task" -> create_agent_task(args)
       "get_detailed_task_board" -> get_detailed_task_board(args)
       "get_agent_task_history" -> get_agent_task_history(args)
+      "discover_codebase_info" -> discover_codebase_info(args)
       _ -> {:error, "Unknown coordinator tool: #{tool_name}"}
     end
   end

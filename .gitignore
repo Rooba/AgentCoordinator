@@ -95,3 +95,6 @@ coverage/
 
 /docs/LANGUAGE_IMPLEMENTATIONS.md
 /asdf.txt
+/erl_crash.dump
+/_build
+/test_env

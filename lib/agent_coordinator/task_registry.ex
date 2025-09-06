@@ -79,6 +79,10 @@ defmodule AgentCoordinator.TaskRegistry do
     GenServer.call(__MODULE__, {:complete_task, agent_id}, 30_000)
   end
 
+  def update_agent(agent_id, updated_agent) do
+    GenServer.call(__MODULE__, {:update_agent, agent_id, updated_agent})
+  end
+
   def get_task_board do
     GenServer.call(__MODULE__, :get_task_board)
   end
@@ -423,6 +427,18 @@ defmodule AgentCoordinator.TaskRegistry do
     end
   end
 
+  def handle_call({:update_agent, agent_id, updated_agent}, _from, state) do
+    case Map.get(state.agents, agent_id) do
+      nil ->
+        {:reply, {:error, :agent_not_found}, state}
+
+      _current_agent ->
+        new_agents = Map.put(state.agents, agent_id, updated_agent)
+        new_state = %{state | agents: new_agents}
+        {:reply, :ok, new_state}
+    end
+  end
+
   def handle_call(:get_task_board, _from, state) do
     agents_info =
       Enum.map(state.agents, fn {_id, agent} ->
@@ -439,7 +455,9 @@ defmodule AgentCoordinator.TaskRegistry do
           capabilities: agent.capabilities,
           current_task: current_task,
           last_heartbeat: agent.last_heartbeat,
-          online: Agent.is_online?(agent)
+          online: Agent.is_online?(agent),
+          current_activity: agent.current_activity,
+          current_files: agent.current_files || []
         }
       end)
 

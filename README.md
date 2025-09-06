@@ -4,100 +4,129 @@ A **Model Context Protocol (MCP) server** that enables multiple AI agents to coo
 
 ## 🎯 What is Agent Coordinator?
 
-Agent Coordinator is a **unified MCP proxy server** that enables multiple AI agents to collaborate seamlessly without conflicts. As shown in the architecture diagram above, it acts as a single interface connecting multiple agents (Purple Zebra, Yellow Elephant, etc.) to a comprehensive ecosystem of tools and task management.
+Agent Coordinator is a **MCP proxy server** that enables multiple AI agents to collaborate seamlessly without conflicts. As shown in the architecture diagram above, it acts as a **single MCP interface** that proxies ALL tool calls through itself, ensuring every agent maintains full project awareness while the coordinator tracks real-time agent presence.
 
-**The coordinator orchestrates three core components:**
+**The coordinator operates as a transparent proxy layer:**
+- **Single Interface**: All agents connect to one MCP server (the coordinator)
+- **Proxy Architecture**: Every tool call flows through the coordinator to external MCP servers
+- **Presence Tracking**: Each proxied tool call updates agent heartbeat and task status
+- **Project Awareness**: All agents see the same unified view of project state through the proxy
+
+**This proxy design orchestrates four core components:**
 - **Task Registry**: Intelligent task queuing, agent matching, and automatic progress tracking
 - **Agent Manager**: Agent registration, heartbeat monitoring, and capability-based assignment
 - **Codebase Registry**: Cross-repository coordination, dependency management, and workspace organization
+- **Unified Tool Registry**: Seamlessly proxies external MCP tools while adding coordination capabilities
 
-**Plus a Unified Tool Registry** that seamlessly combines:
-- Native coordination tools (register_agent, get_next_task, etc.)
-- Proxied MCP tools from external servers (read_file, search_memory, etc.)
-- VS Code integration tools (get_active_editor, run_command, etc.)
-
-Instead of agents conflicting over files or duplicating work, they connect through a single MCP interface that automatically routes tool calls, tracks all operations as coordinated tasks, and maintains real-time communication via personal agent inboxes and shared task boards.
+Instead of agents conflicting over files or duplicating work, they connect through a **single MCP proxy interface** that routes ALL tool calls through the coordinator. This ensures every tool usage updates agent presence, tracks coordinated tasks, and maintains real-time project awareness across all agents via shared task boards and agent inboxes.
 
 **Key Features:**
 
+- **🔄 MCP Proxy Architecture**: Single server that proxies ALL external MCP servers for unified agent access
+- **👁️ Real-Time Activity Tracking**: Live visibility into agent activities: "Reading file.ex", "Editing main.py", "Sequential thinking"
+- **📡 Real-Time Presence Tracking**: Every tool call updates agent status and project awareness
+- **📁 File-Level Coordination**: Track exactly which files each agent is working on to prevent conflicts
+- **📜 Activity History**: Rolling log of recent agent actions with timestamps and file details
 - **🤖 Multi-Agent Coordination**: Register multiple AI agents (GitHub Copilot, Claude, etc.) with different capabilities
-- **� Unified MCP Proxy**: Single MCP server that manages and unifies multiple external MCP servers
+- **🎯 Transparent Tool Routing**: Automatically routes tool calls to appropriate external servers while tracking usage
+- **📝 Automatic Task Creation**: Every tool usage becomes a tracked task with agent coordination context
+- **⚡ Full Project Awareness**: All agents see unified project state through the proxy layer
 - **📡 External Server Management**: Automatically starts, monitors, and manages MCP servers defined in `mcp_servers.json`
-- **🛠️ Universal Tool Registry**: Combines tools from all external servers with native coordination tools
-- **🎯 Intelligent Tool Routing**: Automatically routes tool calls to the appropriate server or handles natively
-- **📝 Automatic Task Tracking**: Every tool usage becomes a tracked task with agent coordination
-- **⚡ Real-Time Communication**: Agents can communicate and share progress via heartbeat system
+- **🛠️ Universal Tool Registry**: Proxies tools from all external servers while adding native coordination tools
 - **🔌 Dynamic Tool Discovery**: Automatically discovers new tools when external servers start/restart
 - **🎮 Cross-Codebase Support**: Coordinate work across multiple repositories and projects
 - **🔌 MCP Standard Compliance**: Works with any MCP-compatible AI agent or tool
 
 ## 🚀 How It Works
 
-```ascii
-                        ┌────────────────────────────┐
-                        │AI AGENTS & TOOLS CONNECTION│
-                        └────────────────────────────┘
-    Agent 1 (Purple Zebra)   Agent 2(Yellow Elephant)    Agent N (...)
-           │                        │                            │
-           └────────────MCP Protocol┼(Single Interface)──────────┘
-                                    │
-    ┌───────────────────────────────┴──────────────────────────────────┐
-    │               AGENT COORDINATOR (Unified MCP Server)             │
-    ├──────────────────────────────────────────────────────────────────┤
-    │  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────┐  │
-    │  │  Task Registry  │  │ Agent Manager   │  │Codebase Registry │  │
-    │  ├─────────────────┤  ├─────────────────┤  ├──────────────────┤  │
-    │  │• Task Queuing   │  │• Registration   │  │• Cross-Repo      │  │
-    │  │• Agent Matching │  │• Heartbeat      │  │• Dependencies    │  │
-    │  │• Auto-Tracking  │  │• Capabilities   │  │• Workspace Mgmt  │  │
-    │  └─────────────────┘  └─────────────────┘  └──────────────────┘  │
-    │  ┌─────────────────────────────────────────────────────────────┐ │
-    │  │                    UNIFIED TOOL REGISTRY                    │ │
-    │  ├─────────────────────────────────────────────────────────────┤ │
-    │  │ Native Tools:      register_agent, get_next_task,           │ ╞═══════════════════════════════════╕
-    │  │                    create_task_set, complete_task, ...      │ │                                   │
-    │  │ Proxied MCP Tools: read_file, write_file,                   │ │                       ┍━━━━━━━━━━━┷━━━━━━━━━━━┑
-    │  │                    search_memory, get_docs, ...             │ │                       │       Task Board      │
-    │  │ VS Code Tools:     get_active_editor, set_selection,        │ │ ┏━━━━━━━━━━━━━━━━━━━━┓┝━━━━━━━━━━━┳━━━━━━━━━━━┥ ┏━━━━━━━━━━━━━━━━━━━━┓
-    │  │                    get_workspace_folders, run_command, ...  │ │ ┃    Agent 1 INBOX   ┃│ Agent 1 Q ┃ Agent 2 Q │ ┃    Agent 2 INBOX   ┃
-    │  ├─────────────────────────────────────────────────────────────┤ │ ┣━━━━━━━━━━━━━━━━━━━━┫┝━━━━━━━━━━━╋━━━━━━━━━━━┥ ┣━━━━━━━━━━━━━━━━━━━━┫
-    │  │       Routes to appropriate server or handles natively      │ │ ┃   current: task 3  ┃│ ✓ Task 1  ┃ ✓ Task 1  │ ┃   current: task 2  ┃
-    │  │       Configure MCP Servers to run via MCP_TOOLS_FILE       │ │ ┃  [ complete task ] ┣┥ ✓ Task 2  ┃ ➔ Task 2  ┝━┫  [ complete task ] ┃<─┐
-    │  └─────────────────────────────────────────────────────────────┘ │ ┗━━━━━━━━━━━━━━━━━━━━┛│ ➔ Task 3  ┃ … Task 3  │ ┗━━━━━━━━━━━━━━━━━━━━┛  │
-    └─────────────────────────────────┬────────────────────────────────┘                       ┝━━━━━━━━━━━╋━━━━━━━━━━━┥                         │
-                                      │                                                        │ Agent 3 Q ┃ Agent 4 Q │ ┏━━━━━━━━━━━━━━━━━━━━┓  │
-                                      │                                                        ┝━━━━━━━━━━━╋━━━━━━━━━━━┥ ┃    Agent 4 INBOX   ┃<─┤ Personal inboxes
-                                      │                                                        │ ✓ Task 1  ┃ ➔ Task 1  │ ┣━━━━━━━━━━━━━━━━━━━━┫  │
-                                      │                                                        │ ✓ Task 2  ┃ … Task 2  │ ┃   current: task 2  ┃  │
-    ┌─────────────────────────────────┴─────────────────────────────────────┐                  │ ✓ Task 3  ┃ … Task 3  ┝━┫  [ complete task ] ┃  │
-    │                         EXTERNAL MCP SERVERS                          │                  ┕━━━━━┳━━━━━┻━━━━━━━━━━━┙ ┗━━━━━━━━━━━━━━━━━━━━┛  │
-    └──────────────┬─────────┬─────────┬─────────┬─────────┬─────────┬──────┤             ┏━━━━━━━━━━┻━━━━━━━━━┓                                 │
-         │         │         │         │         │         │         │      │             ┃    Agent 3 INBOX   ┃<━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┙
-    ┌────┴───┐     │    ┌────┴───┐     │    ┌────┴───┐     │    ┌────┴───┐  │             ┣━━━━━━━━━━━━━━━━━━━━┫
-    │  MCP 1 │     │    │  MCP 2 │     │    │  MCP 3 │     │    │  MCP 4 │  │             ┃   current: none    ┃
-    ├────────┤     │    ├────────┤     │    ├────────┤     │    ├────────┤  │             ┃  [ view history ]  ┃
-    │• tool 1│     │    │• tool 1│     │    │• tool 1│     │    │• tool 1│  │             ┗━━━━━━━━━━━━━━━━━━━━┛
-    │• tool 2│     │    │• tool 2│     │    │• tool 2│     │    │• tool 2│  │
-    │• tool 3│┌────┴───┐│• tool 3│┌────┴───┐│• tool 3│┌────┴───┐│• tool 3│┌─┴──────┐
-    └────────┘│  MCP 5 │└────────┘│  MCP 6 │└────────┘│  MCP 7 │└────────┘│  MCP 8 │
-              ├────────┤          ├────────┤          ├────────┤          ├────────┤
-              │• tool 1│          │• tool 1│          │• tool 1│          │• tool 1│
-              │• tool 2│          │• tool 2│          │• tool 2│          │• tool 2│
-              │• tool 3│          │• tool 3│          │• tool 3│          │• tool 3│
-              └────────┘          └────────┘          └────────┘          └────────┘
+![Agent Coordinator Architecture](docs/architecture-diagram.svg)
 
+**The Agent Coordinator acts as a transparent MCP proxy server** that routes ALL tool calls through itself to maintain agent presence and provide full project awareness. Every external MCP server is proxied through the coordinator, ensuring unified agent coordination.
 
+### 🔄 Proxy Architecture Flow
 
-    🔥 WHAT HAPPENS:
-    1. Agent Coordinator reads mcp_servers.json config
-    2. Spawns & initializes all external MCP servers
-    3. Discovers tools from each server via MCP protocol
-    4. Builds unified tool registry (native + external)
-    5. Presents single MCP interface to AI agents
-    6. Routes tool calls to appropriate servers
-    7. Automatically tracks all operations as tasks
-    8. Maintains heartbeat & coordination across agents
+1. **Agent Registration**: Multiple AI agents (Purple Zebra, Yellow Elephant, etc.) register with their capabilities
+2. **External Server Discovery**: Coordinator automatically starts and discovers tools from external MCP servers
+3. **Unified Proxy Interface**: All tools (native + external) are available through a single MCP interface
+4. **Transparent Tool Routing**: ALL tool calls proxy through coordinator → external servers → coordinator → agents
+5. **Presence Tracking**: Every proxied tool call updates agent heartbeat and task status
+6. **Project Awareness**: All agents maintain unified project state through the proxy layer
 
+## 👁️ Real-Time Activity Tracking - FANTASTIC Feature! 🎉
+
+**See exactly what every agent is doing in real-time!** The coordinator intelligently tracks and displays agent activities as they happen:
+
+### 🎯 Live Activity Examples
+
+```json
+{
+  "agent_id": "github-copilot-purple-elephant",
+  "name": "GitHub Copilot Purple Elephant",
+  "current_activity": "Reading mix.exs",
+  "current_files": ["/home/ra/agent_coordinator/mix.exs"],
+  "activity_history": [
+    {
+      "activity": "Reading mix.exs",
+      "files": ["/home/ra/agent_coordinator/mix.exs"],
+      "timestamp": "2025-09-06T16:41:09.193087Z"
+    },
+    {
+      "activity": "Sequential thinking: Analyzing the current codebase structure...",
+      "files": [],
+      "timestamp": "2025-09-06T16:41:05.123456Z"
+    },
+    {
+      "activity": "Editing agent.ex",
+      "files": ["/home/ra/agent_coordinator/lib/agent_coordinator/agent.ex"],
+      "timestamp": "2025-09-06T16:40:58.987654Z"
+    }
+  ]
+}
+```
+
+### 🚀 Activity Types Tracked
+
+- **📂 File Operations**: "Reading config.ex", "Editing main.py", "Writing README.md", "Creating new_feature.js"
+- **🧠 Thinking Activities**: "Sequential thinking: Analyzing the problem...", "Having a sequential thought..."
+- **🔍 Search Operations**: "Searching for 'function'", "Semantic search for 'authentication'"
+- **⚡ Terminal Commands**: "Running: mix test...", "Checking terminal output"
+- **🛠️ VS Code Actions**: "VS Code: set editor content", "Viewing active editor in VS Code"
+- **🧪 Testing**: "Running tests in user_test.exs", "Running all tests"
+- **📊 Task Management**: "Creating task: Fix bug", "Getting next task", "Completing current task"
+- **🌐 Web Operations**: "Fetching 3 webpages", "Getting library docs for React"
+
+### 🎯 Benefits
+
+- **🚫 Prevent File Conflicts**: See which files are being edited by which agents
+- **👥 Coordinate Team Work**: Know when agents are working on related tasks
+- **🐛 Debug Agent Behavior**: Track what agents did before encountering issues
+- **📈 Monitor Progress**: Watch real-time progress across multiple agents
+- **🔄 Optimize Workflows**: Identify bottlenecks and coordination opportunities
+
+**Every tool call automatically updates the agent's activity - no configuration needed!** 🫡😸
+
+### 🏗️ Architecture Components
+
+**Core Coordinator Components:**
+
+- **Task Registry**: Intelligent task queuing, agent matching, and progress tracking
+- **Agent Manager**: Registration, heartbeat monitoring, and capability-based assignment
+- **Codebase Registry**: Cross-repository coordination and workspace management
+- **Unified Tool Registry**: Combines native coordination tools with external MCP tools
+
+**External Integration:**
+
+- **MCP Servers**: Filesystem, Memory, Context7, Sequential Thinking, and more
+- **VS Code Integration**: Direct editor commands and workspace management
+- **Real-Time Dashboard**: Live task board showing agent status and progress
+
+**Example Proxy Tool Call Flow:**
+
+```text
+Agent calls "read_file" → Coordinator proxies to filesystem server →
+Updates agent presence + task tracking → Returns file content to agent
+
+Result: All other agents now aware of the file access via task board
 ```
 
 ## 🔧 MCP Server Management & Unified Tool Registry
@@ -174,19 +203,12 @@ The coordinator combines tools from multiple sources into a single, coherent int
 
 **Dynamic Discovery Process:**
 
-```ascii
-┌─────────────────┐    MCP Protocol    ┌─────────────────┐
-│ Agent           │ ──────────────────▶│ Agent           │
-│ Coordinator     │                    │ Coordinator     │
-│                 │ initialize         │                 │
-│ 1. Starts       │◀─────────────────  │ 2. Responds     │
-│    External     │                    │    with info    │
-│    Server       │ tools/list         │                 │
-│                 │ ──────────────────▶│ 3. Returns      │
-│ 4. Registers    │                    │    tool list    │
-│    Tools        │◀─────────────────  │                 │
-└─────────────────┘                    └─────────────────┘
-```
+1. **🚀 Startup**: Agent Coordinator starts external MCP server process
+2. **🤝 Initialize**: Sends MCP `initialize` request → Server responds with capabilities
+3. **📋 Discovery**: Sends `tools/list` request → Server returns available tools
+4. **✅ Registration**: Adds discovered tools to unified tool registry
+
+This process repeats automatically when servers restart or new servers are added.
 
 ### 🎯 Intelligent Tool Routing
 
@@ -262,7 +284,7 @@ docker-compose restart agent-coordinator
 
 ### Option B: Manual Setup
 
-#### 1. Get the Code
+#### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/your-username/agent_coordinator.git
