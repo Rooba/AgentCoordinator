@@ -35,5 +35,7 @@ jobs:
           context: .
           push: true
           tags: |
-            rooba/agentcoordinator:latest
-            rooba/agentcoordinator:${{ github.sha }}
+            ghcr.io/rooba/agentcoordinator:latest
+            ghcr.io/rooba/agentcoordinator:${{ github.sha }}
+          file: ./Dockerfile
+          github-token: ${{ secrets.GITHUB_TOKEN }}
