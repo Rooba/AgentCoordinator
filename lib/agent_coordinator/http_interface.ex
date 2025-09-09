@@ -26,7 +26,7 @@ defmodule AgentCoordinator.HttpInterface do
   def start_link(opts \\ []) do
     port = Keyword.get(opts, :port, 8080)
 
-    Logger.info("Starting Agent Coordinator HTTP interface on port #{port}")
+    IO.puts(:stderr, "Starting Agent Coordinator HTTP interface on port #{port}")
 
     Plug.Cowboy.http(__MODULE__, [],
       port: port,
@@ -158,7 +158,7 @@ defmodule AgentCoordinator.HttpInterface do
           send_json_response(conn, 400, %{error: error})
 
         unexpected ->
-          Logger.error("Unexpected MCP response: #{inspect(unexpected)}")
+          IO.puts(:stderr, "Unexpected MCP response: #{inspect(unexpected)}")
           send_json_response(conn, 500, %{
             error: %{
               code: -32603,
@@ -317,7 +317,7 @@ defmodule AgentCoordinator.HttpInterface do
     rescue
       # Client disconnected
       _ ->
-        Logger.info("SSE client disconnected")
+        IO.puts(:stderr, "SSE client disconnected")
         conn
     end
   end
@@ -411,7 +411,7 @@ defmodule AgentCoordinator.HttpInterface do
           origin
         else
           # For production, be more restrictive
-          Logger.warning("Potentially unsafe origin: #{origin}")
+          IO.puts(:stderr, "Potentially unsafe origin: #{origin}")
           "*"  # Fallback for now, could be more restrictive
         end
       _ -> "*"
@@ -487,7 +487,7 @@ defmodule AgentCoordinator.HttpInterface do
               validated: true
             }}
           {:error, reason} ->
-            Logger.warning("Invalid MCP session token: #{reason}")
+            IO.puts(:stderr, "Invalid MCP session token: #{reason}")
             # Fall back to generating anonymous session
             anonymous_id = "http_anonymous_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
             {anonymous_id, %{validated: false, reason: reason}}
@@ -559,7 +559,7 @@ defmodule AgentCoordinator.HttpInterface do
         send_json_response(conn, 400, response)
 
       unexpected ->
-        Logger.error("Unexpected MCP response: #{inspect(unexpected)}")
+        IO.puts(:stderr, "Unexpected MCP response: #{inspect(unexpected)}")
         send_json_response(conn, 500, %{
           jsonrpc: "2.0",
           id: Map.get(mcp_request, "id"),

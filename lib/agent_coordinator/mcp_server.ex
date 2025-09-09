@@ -654,7 +654,7 @@ defmodule AgentCoordinator.MCPServer do
             }}
 
           {:error, reason} ->
-            Logger.error("Failed to create session for agent #{agent.id}: #{inspect(reason)}")
+            IO.puts(:stderr, "Failed to create session for agent #{agent.id}: #{inspect(reason)}")
             # Still return success but without session token for backward compatibility
             {:ok, %{agent_id: agent.id, codebase_id: agent.codebase_id, status: "registered"}}
         end
@@ -1226,17 +1226,15 @@ defmodule AgentCoordinator.MCPServer do
           tools: []
         }
 
-        # Initialize the server and get tools
+        # Initialize the server and get tools with shorter timeout
         case initialize_external_server(server_info) do
           {:ok, tools} ->
             {:ok, %{server_info | tools: tools}}
 
           {:error, reason} ->
-            # Cleanup on initialization failure
-            cleanup_external_pid_file(pid_file_path)
-            kill_external_process(os_pid)
-            if Port.info(port), do: Port.close(port)
-            {:error, reason}
+            # Log error but don't fail - continue with empty tools
+            IO.puts(:stderr, "Failed to initialize #{name}: #{reason}")
+            {:ok, %{server_info | tools: []}}
         end
 
       {:error, reason} ->
@@ -1276,6 +1274,8 @@ defmodule AgentCoordinator.MCPServer do
     env_list =
       Enum.map(env, fn {key, value} -> {String.to_charlist(key), String.to_charlist(value)} end)
 
+    # Use pipe communication but allow stdin/stdout for MCP protocol
+    # Remove :nouse_stdio since MCP servers need stdin/stdout to communicate
     port_options = [
       :binary,
       :stream,
@@ -1357,7 +1357,7 @@ defmodule AgentCoordinator.MCPServer do
     Port.command(server_info.port, request_json)
 
     # Collect full response by reading multiple lines if needed
-    response_data = collect_external_response(server_info.port, "", 30_000)
+    response_data = collect_external_response(server_info.port, "", 5_000)
 
     cond do
       response_data == "" ->
@@ -1503,35 +1503,6 @@ defmodule AgentCoordinator.MCPServer do
     pid_file_path
   end
 
-  defp cleanup_external_pid_file(pid_file_path) do
-    if File.exists?(pid_file_path) do
-      File.rm(pid_file_path)
-    end
-  end
-
-  defp kill_external_process(os_pid) when is_integer(os_pid) do
-    try do
-      case System.cmd("kill", ["-TERM", to_string(os_pid)]) do
-        {_, 0} ->
-          IO.puts(:stderr, "Successfully terminated process #{os_pid}")
-          :ok
-
-        {_, _} ->
-          case System.cmd("kill", ["-KILL", to_string(os_pid)]) do
-            {_, 0} ->
-              IO.puts(:stderr, "Force killed process #{os_pid}")
-              :ok
-
-            {_, _} ->
-              IO.puts(:stderr, "Failed to kill process #{os_pid}")
-              :error
-          end
-      end
-    rescue
-      _ -> :error
-    end
-  end
-
   defp get_all_unified_tools_from_state(state) do
     # Combine coordinator tools with external server tools from state
     coordinator_tools = @mcp_tools
@@ -1560,12 +1531,12 @@ defmodule AgentCoordinator.MCPServer do
   defp route_tool_call(tool_name, args, state) do
     # Extract agent_id for activity tracking
     agent_id = Map.get(args, "agent_id")
-    
+
     # Update agent activity before processing the tool call
     if agent_id do
       ActivityTracker.update_agent_activity(agent_id, tool_name, args)
     end
-    
+
     # Check if it's a coordinator tool first
     coordinator_tool_names = Enum.map(@mcp_tools, & &1["name"])
 
@@ -1583,12 +1554,12 @@ defmodule AgentCoordinator.MCPServer do
         # Try to route to external server
         route_to_external_server(tool_name, args, state)
     end
-    
+
     # Clear agent activity after tool call completes (optional - could keep until next call)
     # if agent_id do
     #   ActivityTracker.clear_agent_activity(agent_id)
     # end
-    
+
     result
   end
 

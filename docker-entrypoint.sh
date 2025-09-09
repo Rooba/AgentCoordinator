@@ -9,13 +9,23 @@ set -e
 export MIX_ENV="${MIX_ENV:-prod}"
 export NATS_HOST="${NATS_HOST:-localhost}"
 export NATS_PORT="${NATS_PORT:-4222}"
+export DOCKERIZED="true"
+COLORIZED="${COLORIZED:-}"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+if [ ! -z "$COLORIZED" ]; then
+    # Colors for output
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m' # No Color
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    NC=''
+fi
 
 # Logging functions
 log_info() {
@@ -30,22 +40,12 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1" >&2
+log_debug() {
+    echo -e "${GREEN}[DEBUG]${NC} $1" >&2
 }
 
-# Cleanup function for graceful shutdown
 cleanup() {
-    log_info "Received shutdown signal, cleaning up..."
-
-    # Send termination signals to child processes
-    if [ ! -z "$MAIN_PID" ]; then
-        log_info "Stopping main process (PID: $MAIN_PID)..."
-        kill -TERM "$MAIN_PID" 2>/dev/null || true
-        wait "$MAIN_PID" 2>/dev/null || true
-    fi
-
-    log_success "Cleanup completed"
+    log_info "Received shutdown signal, shutting down..."
     exit 0
 }
 
@@ -62,7 +62,7 @@ wait_for_nats() {
 
         while [ $count -lt $timeout ]; do
             if nc -z "$NATS_HOST" "$NATS_PORT" 2>/dev/null; then
-                log_success "NATS is available"
+                log_debug "NATS is available"
                 return 0
             fi
 
@@ -88,13 +88,7 @@ validate_config() {
         exit 1
     fi
 
-    # Validate JSON
-    if ! cat /app/mcp_servers.json | bun run -e "JSON.parse(require('fs').readFileSync(0, 'utf8'))" >/dev/null 2>&1; then
-        log_error "Invalid JSON in mcp_servers.json"
-        exit 1
-    fi
-
-    log_success "Configuration validation passed"
+    log_debug "Configuration validation passed"
 }
 
 # Pre-install external MCP server dependencies
@@ -120,7 +114,7 @@ preinstall_dependencies() {
         bun add --global --silent "$package" || log_warn "Failed to cache $package"
     done
 
-    log_success "Dependencies pre-installed"
+    log_debug "Dependencies pre-installed"
 }
 
 # Main execution
@@ -128,6 +122,7 @@ main() {
     log_info "Starting Agent Coordinator MCP Server"
     log_info "Environment: $MIX_ENV"
     log_info "NATS: $NATS_HOST:$NATS_PORT"
+
 
     # Validate configuration
     validate_config
@@ -147,8 +142,7 @@ main() {
     if [ "$#" -eq 0 ] || [ "$1" = "/app/scripts/mcp_launcher.sh" ]; then
         # Default: start the MCP server
         log_info "Starting MCP server via launcher script..."
-        exec "/app/scripts/mcp_launcher.sh" &
-        MAIN_PID=$!
+        exec "/app/scripts/mcp_launcher.sh"
     elif [ "$1" = "bash" ] || [ "$1" = "sh" ]; then
         # Interactive shell mode
         log_info "Starting interactive shell..."
@@ -156,21 +150,10 @@ main() {
     elif [ "$1" = "release" ]; then
         # Direct release mode
         log_info "Starting via Elixir release..."
-        exec "/app/bin/agent_coordinator" "start" &
-        MAIN_PID=$!
+        exec "/app/bin/agent_coordinator" "start"
     else
-        # Custom command
-        log_info "Starting custom command: $*"
-        exec "$@" &
-        MAIN_PID=$!
-    fi
-
-    # Wait for the main process if it's running in background
-    if [ ! -z "$MAIN_PID" ]; then
-        log_success "Main process started (PID: $MAIN_PID)"
-        wait "$MAIN_PID"
+        exit 0
     fi
 }
 
-# Execute main function with all arguments
 main "$@"

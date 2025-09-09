@@ -1,51 +1,17 @@
 version: '3.8'
 
 services:
-  # Agent Coordinator MCP Server
-  agent-coordinator:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: agent-coordinator
-    environment:
-      - MIX_ENV=prod
-      - NATS_HOST=nats
-      - NATS_PORT=4222
-    volumes:
-      # Mount local mcp_servers.json for easy configuration
-      - ./mcp_servers.json:/app/mcp_servers.json:ro
-      # Mount a directory for persistent data (optional)
-      - agent_data:/app/data
-    ports:
-      # Expose port 4000 if the app serves HTTP endpoints
-      - "4000:4000"
-    depends_on:
-      nats:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["/app/bin/agent_coordinator", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
-  # NATS Message Broker (optional but recommended for production)
   nats:
     image: nats:2.10-alpine
     container_name: agent-coordinator-nats
     command:
       - '--jetstream'
       - '--store_dir=/data'
-      - '--max_file_store=1G'
-      - '--max_mem_store=256M'
+      - '--http_port=8222'
     ports:
-      # NATS client port
-      - "4222:4222"
-      # NATS HTTP monitoring port
-      - "8222:8222"
-      # NATS routing port for clustering
-      - "6222:6222"
+      - "4223:4222"
+      - "8223:8222"
+      - "6223:6222"
     volumes:
       - nats_data:/data
     restart: unless-stopped
@@ -55,31 +21,32 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - agent-coordinator-network
 
-  # Optional: NATS Monitoring Dashboard
-  nats-board:
-    image: devforth/nats-board:latest
-    container_name: agent-coordinator-nats-board
+  agent-coordinator:
+    image: ghcr.io/rooba/agentcoordinator:latest
+    container_name: agent-coordinator
     environment:
-      - NATS_HOSTS=nats:4222
+      - NATS_HOST=nats
+      - NATS_PORT=4222
+      - MIX_ENV=prod
+    volumes:
+      - ./mcp_servers.json:/app/mcp_servers.json:ro
+      - ./workspace:/workspace:rw
     ports:
-      - "8080:8080"
+      - "4000:4000"
     depends_on:
       nats:
         condition: service_healthy
     restart: unless-stopped
-    profiles:
-      - monitoring
+    networks:
+      - agent-coordinator-network
 
 volumes:
-  # Persistent storage for NATS JetStream
   nats_data:
     driver: local
 
-  # Persistent storage for agent coordinator data
-  agent_data:
-    driver: local
-
 networks:
-  default:
-    name: agent-coordinator-network
+  agent-coordinator-network:
+    driver: bridge

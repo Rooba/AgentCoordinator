@@ -78,7 +78,7 @@ defmodule AgentCoordinator.SessionManager do
       }
     }
 
-    Logger.info("SessionManager started with #{state.config.expiry_minutes}min expiry")
+    IO.puts(:stderr, "SessionManager started with #{state.config.expiry_minutes}min expiry")
     {:ok, state}
   end
 
@@ -99,7 +99,7 @@ defmodule AgentCoordinator.SessionManager do
     new_sessions = Map.put(state.sessions, session_token, session_data)
     new_state = %{state | sessions: new_sessions}
 
-    Logger.debug("Created session #{session_token} for agent #{agent_id}")
+    IO.puts(:stderr, "Created session #{session_token} for agent #{agent_id}")
     {:reply, {:ok, session_token}, new_state}
   end
 
@@ -136,7 +136,7 @@ defmodule AgentCoordinator.SessionManager do
       session_data ->
         new_sessions = Map.delete(state.sessions, session_token)
         new_state = %{state | sessions: new_sessions}
-        Logger.debug("Invalidated session #{session_token} for agent #{session_data.agent_id}")
+        IO.puts(:stderr, "Invalidated session #{session_token} for agent #{session_data.agent_id}")
         {:reply, :ok, new_state}
     end
   end
@@ -161,7 +161,7 @@ defmodule AgentCoordinator.SessionManager do
       end)
 
     if length(expired_sessions) > 0 do
-      Logger.debug("Cleaned up #{length(expired_sessions)} expired sessions")
+      IO.puts(:stderr, "Cleaned up #{length(expired_sessions)} expired sessions")
     end
 
     new_state = %{state | sessions: Map.new(active_sessions)}

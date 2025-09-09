@@ -37,7 +37,7 @@ defmodule AgentCoordinator.WebSocketHandler do
     # Start heartbeat timer
     Process.send_after(self(), :heartbeat, @heartbeat_interval)
 
-    Logger.info("WebSocket connection established: #{session_id}")
+    IO.puts(:stderr, "WebSocket connection established: #{session_id}")
 
     {:ok, state}
   end
@@ -64,7 +64,7 @@ defmodule AgentCoordinator.WebSocketHandler do
 
   @impl WebSock
   def handle_in({_binary, [opcode: :binary]}, state) do
-    Logger.warning("Received unexpected binary data on WebSocket")
+    IO.puts(:stderr, "Received unexpected binary data on WebSocket")
     {:ok, state}
   end
 
@@ -95,20 +95,20 @@ defmodule AgentCoordinator.WebSocketHandler do
 
   @impl WebSock
   def handle_info(message, state) do
-    Logger.debug("Received unexpected message: #{inspect(message)}")
+    IO.puts(:stderr, "Received unexpected message: #{inspect(message)}")
     {:ok, state}
   end
 
   @impl WebSock
   def terminate(:remote, state) do
-    Logger.info("WebSocket connection closed by client: #{state.session_id}")
+    IO.puts(:stderr, "WebSocket connection closed by client: #{state.session_id}")
     cleanup_session(state)
     :ok
   end
 
   @impl WebSock
   def terminate(reason, state) do
-    Logger.info("WebSocket connection terminated: #{state.session_id}, reason: #{inspect(reason)}")
+    IO.puts(:stderr, "WebSocket connection terminated: #{state.session_id}, reason: #{inspect(reason)}")
     cleanup_session(state)
     :ok
   end
@@ -245,7 +245,7 @@ defmodule AgentCoordinator.WebSocketHandler do
             {:reply, {:text, Jason.encode!(response)}, updated_state}
 
           unexpected ->
-            Logger.error("Unexpected MCP response: #{inspect(unexpected)}")
+            IO.puts(:stderr, "Unexpected MCP response: #{inspect(unexpected)}")
             error_response = %{
               "jsonrpc" => "2.0",
               "id" => Map.get(message, "id"),
@@ -287,7 +287,7 @@ defmodule AgentCoordinator.WebSocketHandler do
 
   defp handle_initialized_notification(_message, state) do
     # Client is ready to receive notifications
-    Logger.info("WebSocket client initialized: #{state.session_id}")
+    IO.puts(:stderr, "WebSocket client initialized: #{state.session_id}")
     {:ok, state}
   end
 
@@ -304,7 +304,7 @@ defmodule AgentCoordinator.WebSocketHandler do
           {:ok, state}
 
         unexpected ->
-          Logger.error("Unexpected MCP response: #{inspect(unexpected)}")
+          IO.puts(:stderr, "Unexpected MCP response: #{inspect(unexpected)}")
           {:ok, state}
       end
     else

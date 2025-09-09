@@ -18,9 +18,8 @@ services:
     profiles:
       - dev
 
-  # Lightweight development NATS without persistence
   nats:
-    command: 
+    command:
       - '--jetstream'
     volumes: []
     profiles:

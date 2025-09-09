@@ -102,7 +102,7 @@ defmodule AgentCoordinator.InterfaceManager do
       metrics: initialize_metrics()
     }
 
-    Logger.info("Interface Manager starting with config: #{inspect(config.enabled_interfaces)}")
+    IO.puts(:stderr, "Interface Manager starting with config: #{inspect(config.enabled_interfaces)}")
 
     # Start enabled interfaces
     {:ok, state, {:continue, :start_interfaces}}
@@ -114,11 +114,11 @@ defmodule AgentCoordinator.InterfaceManager do
     updated_state = Enum.reduce(state.config.enabled_interfaces, state, fn interface_type, acc ->
       case start_interface_server(interface_type, state.config, acc) do
         {:ok, interface_info} ->
-          Logger.info("Started #{interface_type} interface")
+          IO.puts(:stderr, "Started #{interface_type} interface")
           %{acc | interfaces: Map.put(acc.interfaces, interface_type, interface_info)}
 
         {:error, reason} ->
-          Logger.error("Failed to start #{interface_type} interface: #{reason}")
+          IO.puts(:stderr, "Failed to start #{interface_type} interface: #{reason}")
           acc
       end
     end)
@@ -152,11 +152,11 @@ defmodule AgentCoordinator.InterfaceManager do
           updated_interfaces = Map.put(state.interfaces, interface_type, interface_info)
           updated_state = %{state | interfaces: updated_interfaces}
 
-          Logger.info("Started #{interface_type} interface on demand")
+          IO.puts(:stderr, "Started #{interface_type} interface on demand")
           {:reply, {:ok, interface_info}, updated_state}
 
         {:error, reason} ->
-          Logger.error("Failed to start #{interface_type} interface: #{reason}")
+          IO.puts(:stderr, "Failed to start #{interface_type} interface: #{reason}")
           {:reply, {:error, reason}, state}
       end
     else
@@ -176,11 +176,11 @@ defmodule AgentCoordinator.InterfaceManager do
             updated_interfaces = Map.delete(state.interfaces, interface_type)
             updated_state = %{state | interfaces: updated_interfaces}
 
-            Logger.info("Stopped #{interface_type} interface")
+            IO.puts(:stderr, "Stopped #{interface_type} interface")
             {:reply, :ok, updated_state}
 
           {:error, reason} ->
-            Logger.error("Failed to stop #{interface_type} interface: #{reason}")
+            IO.puts(:stderr, "Failed to stop #{interface_type} interface: #{reason}")
             {:reply, {:error, reason}, state}
         end
     end
@@ -202,7 +202,7 @@ defmodule AgentCoordinator.InterfaceManager do
                 updated_interfaces = Map.put(state.interfaces, interface_type, new_interface_info)
                 updated_state = %{state | interfaces: updated_interfaces}
 
-                Logger.info("Restarted #{interface_type} interface")
+                IO.puts(:stderr, "Restarted #{interface_type} interface")
                 {:reply, {:ok, new_interface_info}, updated_state}
 
               {:error, reason} ->
@@ -210,12 +210,12 @@ defmodule AgentCoordinator.InterfaceManager do
                 updated_interfaces = Map.delete(state.interfaces, interface_type)
                 updated_state = %{state | interfaces: updated_interfaces}
 
-                Logger.error("Failed to restart #{interface_type} interface: #{reason}")
+                IO.puts(:stderr, "Failed to restart #{interface_type} interface: #{reason}")
                 {:reply, {:error, reason}, updated_state}
             end
 
           {:error, reason} ->
-            Logger.error("Failed to stop #{interface_type} interface for restart: #{reason}")
+            IO.puts(:stderr, "Failed to stop #{interface_type} interface for restart: #{reason}")
             {:reply, {:error, reason}, state}
         end
     end
@@ -253,7 +253,7 @@ defmodule AgentCoordinator.InterfaceManager do
     updated_registry = Map.put(state.session_registry, session_id, session_data)
     updated_state = %{state | session_registry: updated_registry}
 
-    Logger.debug("Registered session #{session_id} for #{interface_type}")
+    IO.puts(:stderr, "Registered session #{session_id} for #{interface_type}")
     {:noreply, updated_state}
   end
 
@@ -261,14 +261,14 @@ defmodule AgentCoordinator.InterfaceManager do
   def handle_cast({:unregister_session, session_id}, state) do
     case Map.get(state.session_registry, session_id) do
       nil ->
-        Logger.debug("Attempted to unregister unknown session: #{session_id}")
+        IO.puts(:stderr, "Attempted to unregister unknown session: #{session_id}")
         {:noreply, state}
 
       _session_data ->
         updated_registry = Map.delete(state.session_registry, session_id)
         updated_state = %{state | session_registry: updated_registry}
 
-        Logger.debug("Unregistered session #{session_id}")
+        IO.puts(:stderr, "Unregistered session #{session_id}")
         {:noreply, updated_state}
     end
   end
@@ -278,7 +278,7 @@ defmodule AgentCoordinator.InterfaceManager do
     # Handle interface process crashes
     case find_interface_by_pid(pid, state.interfaces) do
       {interface_type, _interface_info} ->
-        Logger.error("#{interface_type} interface crashed: #{inspect(reason)}")
+        IO.puts(:stderr, "#{interface_type} interface crashed: #{inspect(reason)}")
 
         # Remove from running interfaces
         updated_interfaces = Map.delete(state.interfaces, interface_type)
@@ -286,14 +286,14 @@ defmodule AgentCoordinator.InterfaceManager do
 
         # Optionally restart if configured
         if should_auto_restart?(interface_type, state.config) do
-          Logger.info("Auto-restarting #{interface_type} interface")
+          IO.puts(:stderr, "Auto-restarting #{interface_type} interface")
           Process.send_after(self(), {:restart_interface, interface_type}, 5000)
         end
 
         {:noreply, updated_state}
 
       nil ->
-        Logger.debug("Unknown process died: #{inspect(pid)}")
+        IO.puts(:stderr, "Unknown process died: #{inspect(pid)}")
         {:noreply, state}
     end
   end
@@ -305,18 +305,18 @@ defmodule AgentCoordinator.InterfaceManager do
         updated_interfaces = Map.put(state.interfaces, interface_type, interface_info)
         updated_state = %{state | interfaces: updated_interfaces}
 
-        Logger.info("Auto-restarted #{interface_type} interface")
+        IO.puts(:stderr, "Auto-restarted #{interface_type} interface")
         {:noreply, updated_state}
 
       {:error, reason} ->
-        Logger.error("Failed to auto-restart #{interface_type} interface: #{reason}")
+        IO.puts(:stderr, "Failed to auto-restart #{interface_type} interface: #{reason}")
         {:noreply, state}
     end
   end
 
   @impl GenServer
   def handle_info(message, state) do
-    Logger.debug("Interface Manager received unexpected message: #{inspect(message)}")
+    IO.puts(:stderr, "Interface Manager received unexpected message: #{inspect(message)}")
     {:noreply, state}
   end
 
@@ -516,18 +516,46 @@ defmodule AgentCoordinator.InterfaceManager do
 
   defp handle_stdio_loop(state) do
     # Handle MCP JSON-RPC messages from STDIO
+    # Use different approaches for Docker vs regular environments
+    if docker_environment?() do
+      handle_stdio_docker_loop(state)
+    else
+      handle_stdio_regular_loop(state)
+    end
+  end
+
+  defp handle_stdio_regular_loop(state) do
     case IO.read(:stdio, :line) do
       :eof ->
-        Logger.info("STDIO interface shutting down (EOF)")
+        IO.puts(:stderr, "STDIO interface shutting down (EOF)")
         exit(:normal)
 
       {:error, reason} ->
-        Logger.error("STDIO error: #{inspect(reason)}")
+        IO.puts(:stderr, "STDIO error: #{inspect(reason)}")
         exit({:error, reason})
 
       line ->
         handle_stdio_message(String.trim(line), state)
-        handle_stdio_loop(state)
+        handle_stdio_regular_loop(state)
+    end
+  end
+
+  defp handle_stdio_docker_loop(state) do
+    # In Docker, use regular IO.read instead of Port.open({:fd, 0, 1})
+    # to avoid "driver_select stealing control of fd=0" conflicts with external MCP servers
+    # This allows external servers to use pipes while Agent Coordinator reads from stdin
+    case IO.read(:stdio, :line) do
+      :eof ->
+        IO.puts(:stderr, "STDIO interface shutting down (EOF)")
+        exit(:normal)
+
+      {:error, reason} ->
+        IO.puts(:stderr, "STDIO error: #{inspect(reason)}")
+        exit({:error, reason})
+
+      line ->
+        handle_stdio_message(String.trim(line), state)
+        handle_stdio_docker_loop(state)
     end
   end
 
@@ -646,4 +674,21 @@ defmodule AgentCoordinator.InterfaceManager do
   end
 
   defp deep_merge(_left, right), do: right
+
+  # Check if running in Docker environment
+  defp docker_environment? do
+    # Check common Docker environment indicators
+    System.get_env("DOCKER_CONTAINER") != nil or
+    System.get_env("container") != nil or
+    System.get_env("DOCKERIZED") != nil or
+    File.exists?("/.dockerenv") or
+    File.exists?("/proc/1/cgroup") and
+      (File.read!("/proc/1/cgroup") |> String.contains?("docker")) or
+    String.contains?(to_string(System.get_env("PATH", "")), "/app/") or
+    # Check if we're running under a container init system
+    case File.read("/proc/1/comm") do
+      {:ok, comm} -> String.trim(comm) in ["bash", "sh", "docker-init", "tini"]
+      _ -> false
+    end
+  end
 end
