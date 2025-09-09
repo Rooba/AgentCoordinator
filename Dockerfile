@@ -22,7 +22,6 @@ WORKDIR /app
 # Copy mix files
 COPY lib lib
 COPY mcp_servers.json \
-    mcp_interfaces_config.json \
     mix.exs \
     mix.lock \
     docker-entrypoint.sh ./
